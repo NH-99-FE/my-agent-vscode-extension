@@ -1,0 +1,13 @@
+{
+  "arrowParens": "avoid",
+  "endOfLine": "lf",
+  "plugins": [
+    "prettier-plugin-tailwindcss"
+  ],
+  "printWidth": 140,
+  "semi": false,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "tailwindStylesheet": "./webview-ui/src/index.css",
+  "trailingComma": "es5"
+}

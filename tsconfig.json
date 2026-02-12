@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.extension.json" },
+    { "path": "./packages/types/tsconfig.json" },
+    { "path": "./webview-ui/tsconfig.json" }
+  ]
+}

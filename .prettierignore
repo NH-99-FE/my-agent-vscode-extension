@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.turbo
+*.vsix
+*.codex
+*.pnpm-store
+webview-ui/src/components/ui/**

@@ -1,0 +1,45 @@
+{
+  "version": "0.2",
+  "language": "en,zh-CN",
+  "useGitignore": true,
+  "caseSensitive": false,
+  "dictionaries": ["custom-words"],
+  "dictionaryDefinitions": [
+    {
+      "name": "custom-words",
+      "path": "./.cspell/custom-words.txt",
+      "addWords": true
+    }
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/lib/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/.turbo/**",
+    "**/stats.html",
+    ".codex/**",
+    ".pnpm-store/**",
+    "pnpm-lock.yaml",
+    "webview-ui/src/components/ui/**"
+  ],
+  "files": ["{src,packages,webview-ui,scripts}/**/*.{html,js,cjs,mjs,ts,tsx,css,scss,md}"],
+  "words": [
+    "codex",
+    "commitlint",
+    "commitizen",
+    "cspell",
+    "cz",
+    "eslint",
+    "esbuild",
+    "husky",
+    "lintstaged",
+    "monorepo",
+    "pnpm",
+    "turborepo",
+    "vsce",
+    "webview",
+    "shadcn"
+  ]
+}
