@@ -52,3 +52,30 @@
 - 关联的任务或 Issue 编号（如适用）。
 - `webview-ui` 相关 UI 变更的截图或短录屏。
 - 验证记录（列出已执行命令，如 typecheck、lint、build）。
+
+## 当前实现进展（后端）
+
+截至当前，后端主线已完成第 1-6 步的骨架实现，重点如下：
+
+- 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
+- Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
+- 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`。
+- 消息路由层：`messageHandler` 已实现入站消息校验、类型分发、统一错误回包。
+- LLM 流式层：已实现最小可用 `LlmClient`（当前 `mock` provider），支持流式输出事件（delta/done/error）。
+- 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
+- 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略）。
+- 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
+- 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
+
+当前后端可用状态：
+
+- 可完整打通 `chat.send -> 流式 delta -> done/error` 链路。
+- 可对进行中的会话请求执行取消。
+- 可在后端保存并更新会话内容。
+
+当前未完成项（有意留待后续）：
+
+- 真实模型 provider 接入（如 OpenAI/Anthropic）。
+- 工具调用层（tool registry / tool executor）。
+- 更完整的上下文来源（workspace 搜索、诊断、git diff 等）。
+- 自动化测试框架与回归用例。

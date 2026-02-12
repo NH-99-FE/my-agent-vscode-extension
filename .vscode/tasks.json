@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "env": {
+      "PATH": "/Users/didi/.nvm/versions/node/v24.11.0/bin:${env:PATH}"
+    }
+  },
+  "tasks": [
+    {
+      "label": "agent: build webview",
+      "type": "shell",
+      "command": "pnpm build:web",
+      "problemMatcher": []
+    },
+    {
+      "label": "agent: copy webview",
+      "type": "shell",
+      "command": "pnpm copy:web",
+      "problemMatcher": []
+    },
+    {
+      "label": "agent: build extension",
+      "type": "shell",
+      "command": "pnpm build:ext",
+      "problemMatcher": []
+    },
+    {
+      "label": "agent: build debug bundle",
+      "dependsOrder": "sequence",
+      "dependsOn": ["agent: build webview", "agent: copy webview", "agent: build extension"],
+      "problemMatcher": []
+    }
+  ]
+}

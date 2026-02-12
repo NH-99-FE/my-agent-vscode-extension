@@ -1,9 +1,29 @@
 {
   "name": "@agent/root",
+  "displayName": "Agent",
+  "publisher": "lianglh",
   "private": true,
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:agent.openChat"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "agent.openChat",
+        "title": "Open Agent Chat",
+        "category": "Agent"
+      }
+    ]
+  },
   "scripts": {
     "dev:web": "pnpm --filter @agent/webview-ui dev",
     "build:web": "pnpm --filter @agent/webview-ui build",

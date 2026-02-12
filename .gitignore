@@ -45,3 +45,7 @@ coverage
 
 # Local Codex metadata
 # .codex
+
+# media: 前端构建产物
+media/*
+!media/RADEME.md
