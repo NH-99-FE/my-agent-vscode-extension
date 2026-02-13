@@ -3,9 +3,9 @@ import { History, Settings, Pencil, ArrowLeft } from 'lucide-react'
 
 export const TopBar = ({ mode }: { mode: 'thread' | 'detail' }) => {
   return (
-    <div className="flex h-12 w-full items-center justify-between gap-4 overflow-hidden border-b px-4">
+    <div className="flex h-8 w-full items-center justify-between gap-4 overflow-hidden px-2.5">
       {mode === 'thread' ? (
-        <span>任务</span>
+        <span className="text-muted-foreground">任务</span>
       ) : (
         <div className="flex min-w-0 items-center gap-2">
           <div className="shrink-0">
