@@ -2,69 +2,129 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* Make tailwind `dark:` utilities work in VS Code webview themes. */
+@custom-variant dark (&:is(.dark *, body.vscode-dark *, body.vscode-high-contrast *));
 
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Base fallback tokens (outside VS Code host). */
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #1f2328;
+  --card: #ffffff;
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --primary: #0e639c;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1f2328;
+  --muted: #f3f3f3;
+  --muted-foreground: #616161;
+  --accent: #e8e8e8;
+  --accent-foreground: #1f2328;
+  --destructive: #d32f2f;
+  --border: #d4d4d4;
+  --input: #ffffff;
+  --ring: #0078d4;
+  --chart-1: #0e639c;
+  --chart-2: #007acc;
+  --chart-3: #3794ff;
+  --chart-4: #4ec9b0;
+  --chart-5: #dcdcaa;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1f2328;
+  --sidebar-primary: #0e639c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f3f3;
+  --sidebar-accent-foreground: #1f2328;
+  --sidebar-border: #d4d4d4;
+  --sidebar-ring: #0078d4;
+}
+
+/* VS Code light theme */
+body.vscode-light {
+  --background: var(--vscode-editor-background, #ffffff);
+  --foreground: var(--vscode-editor-foreground, #1f2328);
+  --card: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
+  --card-foreground: var(--vscode-editor-foreground, #1f2328);
+  --popover: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
+  --popover-foreground: var(--vscode-editor-foreground, #1f2328);
+  --primary: var(--vscode-button-background, #0e639c);
+  --primary-foreground: var(--vscode-button-foreground, #ffffff);
+  --secondary: var(--vscode-button-secondaryBackground, #f3f3f3);
+  --secondary-foreground: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground, #1f2328));
+  --muted: color-mix(in srgb, var(--vscode-editor-foreground, #1f2328) 8%, transparent);
+  --muted-foreground: color-mix(in srgb, var(--vscode-editor-foreground, #1f2328) 70%, transparent);
+  --accent: var(--vscode-list-hoverBackground, var(--vscode-button-secondaryBackground, #ececec));
+  --accent-foreground: var(--vscode-editor-foreground, #1f2328);
+  --destructive: var(--vscode-errorForeground, #d32f2f);
+  --border: var(--vscode-panel-border, #d4d4d4);
+  --input: var(--vscode-input-background, var(--vscode-editor-background, #ffffff));
+  --ring: var(--vscode-focusBorder, #0078d4);
+}
+
+/* VS Code dark theme */
+body.vscode-dark {
+  --background: var(--vscode-editor-background, #1e1e1e);
+  --foreground: var(--vscode-editor-foreground, #cccccc);
+  --card: var(--vscode-editorWidget-background, #252526);
+  --card-foreground: var(--vscode-editor-foreground, #cccccc);
+  --popover: var(--vscode-editorWidget-background, #252526);
+  --popover-foreground: var(--vscode-editor-foreground, #cccccc);
+  --primary: var(--vscode-button-background, #0e639c);
+  --primary-foreground: var(--vscode-button-foreground, #ffffff);
+  --secondary: var(--vscode-button-secondaryBackground, #3a3d41);
+  --secondary-foreground: var(--vscode-button-secondaryForeground, #cccccc);
+  --muted: color-mix(in srgb, var(--vscode-editor-foreground, #cccccc) 14%, transparent);
+  --muted-foreground: color-mix(in srgb, var(--vscode-editor-foreground, #cccccc) 72%, transparent);
+  --accent: var(--vscode-list-hoverBackground, #2a2d2e);
+  --accent-foreground: var(--vscode-editor-foreground, #cccccc);
+  --destructive: var(--vscode-errorForeground, #f14c4c);
+  --border: var(--vscode-panel-border, #3c3c3c);
+  --input: var(--vscode-input-background, #3c3c3c);
+  --ring: var(--vscode-focusBorder, #007fd4);
+}
+
+/* VS Code high-contrast themes */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --background: var(--vscode-editor-background, #000000);
+  --foreground: var(--vscode-editor-foreground, #ffffff);
+  --card: var(--vscode-editorWidget-background, var(--vscode-editor-background, #000000));
+  --card-foreground: var(--vscode-editor-foreground, #ffffff);
+  --popover: var(--vscode-editorWidget-background, var(--vscode-editor-background, #000000));
+  --popover-foreground: var(--vscode-editor-foreground, #ffffff);
+  --primary: var(--vscode-button-background, #0e639c);
+  --primary-foreground: var(--vscode-button-foreground, #ffffff);
+  --secondary: var(--vscode-button-secondaryBackground, #3a3d41);
+  --secondary-foreground: var(--vscode-button-secondaryForeground, #ffffff);
+  --muted: color-mix(in srgb, var(--vscode-editor-foreground, #ffffff) 16%, transparent);
+  --muted-foreground: color-mix(in srgb, var(--vscode-editor-foreground, #ffffff) 78%, transparent);
+  --accent: var(--vscode-list-hoverBackground, #094771);
+  --accent-foreground: var(--vscode-editor-foreground, #ffffff);
+  --destructive: var(--vscode-errorForeground, #ff6b6b);
+  --border: var(--vscode-contrastBorder, var(--vscode-panel-border, #ffffff));
+  --input: var(--vscode-input-background, var(--vscode-editor-background, #000000));
+  --ring: var(--vscode-focusBorder, #f38518);
 }
 
 body {
   margin: 0;
   min-width: 200px;
   min-height: 100vh;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
 }
 
 @theme inline {
@@ -106,40 +166,6 @@ body {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {

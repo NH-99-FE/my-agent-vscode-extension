@@ -25,7 +25,7 @@ export const Composer = () => {
   }, [])
 
   return (
-    <div className="relative mx-3 my-2 flex flex-col rounded-xl bg-gray-200 p-2">
+    <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground">
       <Textarea
         ref={textareaRef}
         rows={1}
@@ -52,7 +52,7 @@ export const Composer = () => {
       </div>
       <div className="absolute right-2 bottom-2">
         <IconTooltip tipText="发送消息" hasBackground={true}>
-          <div className="rounded-full bg-accent p-1">
+          <div className="rounded-full bg-primary p-1 text-primary-foreground transition-colors duration-150 hover:bg-primary/90">
             <ArrowUp className="h-6 w-6" />
           </div>
         </IconTooltip>

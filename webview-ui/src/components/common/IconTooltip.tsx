@@ -22,7 +22,7 @@ export const IconTooltip = ({
           {children}
         </div>
       </TooltipTrigger>
-      <TooltipContent>
+      <TooltipContent className="border-border bg-muted text-foreground">
         <p>{tipText}</p>
       </TooltipContent>
     </Tooltip>
