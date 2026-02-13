@@ -25,7 +25,7 @@ export const Composer = () => {
   }, [])
 
   return (
-    <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground">
+    <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground shadow-xs">
       <Textarea
         ref={textareaRef}
         rows={1}

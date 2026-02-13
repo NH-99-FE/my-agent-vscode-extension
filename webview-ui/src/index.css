@@ -58,7 +58,7 @@
 body.vscode-light {
   --background: var(--vscode-editor-background, #ffffff);
   --foreground: var(--vscode-editor-foreground, #1f2328);
-  --card: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
+  --card: color-mix(in srgb, var(--vscode-editor-foreground, #1f2328) 4%, var(--vscode-editor-background, #ffffff));
   --card-foreground: var(--vscode-editor-foreground, #1f2328);
   --popover: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
   --popover-foreground: var(--vscode-editor-foreground, #1f2328);
@@ -80,7 +80,7 @@ body.vscode-light {
 body.vscode-dark {
   --background: var(--vscode-editor-background, #1e1e1e);
   --foreground: var(--vscode-editor-foreground, #cccccc);
-  --card: var(--vscode-editorWidget-background, #252526);
+  --card: color-mix(in srgb, var(--vscode-editor-foreground, #cccccc) 9%, var(--vscode-editor-background, #1e1e1e));
   --card-foreground: var(--vscode-editor-foreground, #cccccc);
   --popover: var(--vscode-editorWidget-background, #252526);
   --popover-foreground: var(--vscode-editor-foreground, #cccccc);
@@ -103,7 +103,7 @@ body.vscode-high-contrast,
 body.vscode-high-contrast-light {
   --background: var(--vscode-editor-background, #000000);
   --foreground: var(--vscode-editor-foreground, #ffffff);
-  --card: var(--vscode-editorWidget-background, var(--vscode-editor-background, #000000));
+  --card: color-mix(in srgb, var(--vscode-editor-foreground, #ffffff) 12%, var(--vscode-editor-background, #000000));
   --card-foreground: var(--vscode-editor-foreground, #ffffff);
   --popover: var(--vscode-editorWidget-background, var(--vscode-editor-background, #000000));
   --popover-foreground: var(--vscode-editor-foreground, #ffffff);
