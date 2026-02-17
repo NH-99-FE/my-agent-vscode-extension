@@ -105,6 +105,11 @@ declare module 'vscode' {
     }
   }
 
+  export interface WorkspaceConfiguration {
+    get<T>(section: string): T | undefined
+    get<T>(section: string, defaultValue: T): T
+  }
+
   export namespace commands {
     // 注册命令并返回可释放句柄。
     function registerCommand(command: string, callback: (...args: unknown[]) => unknown): Disposable
@@ -119,6 +124,7 @@ declare module 'vscode' {
   }
 
   export namespace workspace {
+    function getConfiguration(section?: string): WorkspaceConfiguration
     namespace fs {
       // 从 VS Code 虚拟文件系统读取文件字节流。
       function readFile(uri: Uri): Thenable<Uint8Array>

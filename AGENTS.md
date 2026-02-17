@@ -61,18 +61,20 @@
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
 - 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`。
 - 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。
-- LLM 流式层：已实现最小可用 `LlmClient`（当前 `mock` provider），支持流式输出事件（delta/done/error）。
+- LLM 流式层：已完成 provider 抽象（adapter + registry + 统一错误归一化），并接入 `mock/openai` 双通道，支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
 - 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
 - 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略），并新增附件上下文读取与拼装（文本读取、截断、二进制识别、失败跳过）。
 - 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
 - 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
-- Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构（当前 mock 已可观测回显）。
+- Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构；OpenAI 适配中 `reasoningLevel=ultra` 映射为 `high`，其余档位原样透传。
+- Provider 选择策略：后端已支持 `agent.provider.default`（`auto|mock|openai`）配置与模型映射（`mock-*` -> mock，`gpt-*` -> openai）。
 
 当前后端可用状态：
 
 - 可完整打通 `chat.send -> 流式 delta -> done/error` 链路。
 - 可在 `chat.send` 中携带模型、推理强度、附件上下文并完成后端消费。
+- 可通过后端配置切换到 OpenAI 并保持协议输出不变（`chat.delta/chat.done/chat.error`）。
 - 可对进行中的会话请求执行取消。
 - 可在后端保存并更新会话内容。
 
@@ -141,14 +143,19 @@
   - 调用 `vscode.window.showOpenDialog`
   - 回包 `context.files.picked` 并透传同一 `requestId`（用于前端 pending map 稳定命中）
 - LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。
+- 已完成 Provider 抽象层：
+  - `ProviderAdapter` 接口与 `ProviderRegistry` 已落地（含 provider/model 校验）
+  - 错误已统一归一化（鉴权/限流/超时/网络/unknown provider|model）
+- 已完成 OpenAI 首接入（流式）：
+  - 保持协议输出不变（`chat.delta/chat.done/chat.error`）
+  - `model/reasoningLevel` 已真实下传到 OpenAI 请求参数
+  - requestId 在消息链路继续透传（按字段存在透传）
 - `ChatService` 已新增并接入主链路，handler 维持轻量路由职责。
 - 会话持久化与密钥管理已有基础实现（`SessionStore`、`SecretStorage`）。
 
 #### 2) 代办
 
-- 实现双供应商 provider 适配层：
-  - 统一 adapter 接口与错误归一化。
-  - 首批接入两家 provider（如 OpenAI / Anthropic）。
+- 扩展到第二家 provider（Anthropic）并复用现有 adapter/registry 抽象。
 - 完善会话服务边界：
   - 将会话查询、更新、恢复等非发送路径从 handler/调用点进一步收敛到 service 层。
 - 增加协议与 handler 回归测试（重点覆盖 parseInboundMessage 与异常分支）。
@@ -178,7 +185,7 @@
 
 当前未完成项（有意留待后续）：
 
-- 真实模型 provider 接入（如 OpenAI/Anthropic）。
+- 第二家真实模型 provider 接入（Anthropic）。
 - 工具调用层（tool registry / tool executor）。
 - 更完整的上下文来源（workspace 搜索、诊断、git diff 等）。
 - 前端真实发送链路接入（将输入内容与上下文文件选择结果串到完整会话流）。

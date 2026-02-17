@@ -1,9 +1,12 @@
 import type { ChatAttachment, ContextSnippet, ReasoningLevel } from '@agent/types'
+import * as vscode from 'vscode'
 import type { LlmCancellationSignal, LlmClient, LlmStreamEvent } from '../llm/client'
-import { LlmAbortError, LlmTimeoutError } from '../llm/client'
+import { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmProvider } from '../llm/client'
 import type { AttachmentSnippet, SkippedAttachment } from '../context/attachmentContext'
 import { buildAttachmentContext } from '../context/attachmentContext'
 import { buildContextFromActiveEditor } from '../context/contextBuilder'
+import { createUnknownProviderError, formatLlmProviderError } from '../llm/errors'
+import { getOpenAIApiKey } from '../storage/secrets'
 import { SessionStore } from '../storage/sessionStore'
 
 export interface ChatServiceRequest {
@@ -24,10 +27,12 @@ export class ChatService {
   constructor(
     private readonly llmClient: LlmClient,
     private readonly sessionStore: SessionStore,
+    private readonly context: vscode.ExtensionContext,
     private readonly options: ChatServiceOptions = {}
   ) {}
 
   async *streamChat(request: ChatServiceRequest, signal?: LlmCancellationSignal): AsyncGenerator<LlmStreamEvent> {
+    // 先写入用户消息，保证会话时间线与真实请求顺序一致。
     await this.sessionStore.appendUserMessage(request.sessionId, request.text)
 
     const editorContext = buildContextFromActiveEditor()
@@ -38,13 +43,17 @@ export class ChatService {
       attachmentContext.snippets,
       attachmentContext.skipped
     )
+    let provider: LlmProvider = 'mock'
 
     try {
+      // provider 选择属于业务策略，固定收敛在 service，避免泄漏到 handler。
+      provider = await resolveProviderForModel(request.model)
       const stream = this.llmClient.streamChat({
-        provider: 'mock',
+        provider,
         model: request.model,
         reasoningLevel: request.reasoningLevel,
         sessionId: request.sessionId,
+        ...(provider === 'openai' ? { apiKey: await requireOpenAiApiKey(this.context) } : {}),
         messages: [{ role: 'user', content: promptWithContext }],
         timeoutMs: this.options.timeoutMs ?? 30_000,
         maxRetries: this.options.maxRetries ?? 1,
@@ -70,6 +79,13 @@ export class ChatService {
         throw error
       }
 
+      if (error instanceof LlmProviderError) {
+        // 统一格式化 provider 错误，前端可直接按固定模板提示。
+        const formatted = formatLlmProviderError(error)
+        await this.sessionStore.appendAssistantError(request.sessionId, formatted)
+        throw new Error(formatted)
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown chat error.'
       await this.sessionStore.appendAssistantError(request.sessionId, errorMessage)
 
@@ -80,6 +96,52 @@ export class ChatService {
       throw error instanceof Error ? error : new Error(errorMessage)
     }
   }
+}
+
+async function resolveProviderForModel(model: string): Promise<LlmProvider> {
+  const configuredProvider = getConfiguredProvider()
+  if (configuredProvider === 'auto') {
+    // auto 模式下按模型前缀映射，保证前端无 provider 字段也可路由。
+    return inferProviderByModel(model)
+  }
+  return configuredProvider
+}
+
+function getConfiguredProvider(): LlmProvider | 'auto' {
+  const configured = vscode.workspace.getConfiguration('agent').get<string>('provider.default', 'auto')
+  if (configured === 'auto' || configured === 'mock' || configured === 'openai') {
+    return configured
+  }
+  throw createUnknownProviderError(configured)
+}
+
+function inferProviderByModel(model: string): LlmProvider {
+  if (model.startsWith('mock-')) {
+    return 'mock'
+  }
+  if (model.startsWith('gpt-')) {
+    return 'openai'
+  }
+  throw new LlmProviderError({
+    code: 'unknown_model',
+    provider: 'auto',
+    retryable: false,
+    message: `Cannot resolve provider for model "${model}".`,
+  })
+}
+
+async function requireOpenAiApiKey(context: vscode.ExtensionContext): Promise<string> {
+  const apiKey = await getOpenAIApiKey(context)
+  if (apiKey) {
+    return apiKey
+  }
+  // 未配置密钥时明确失败，不做静默回退，避免掩盖环境问题。
+  throw new LlmProviderError({
+    code: 'auth_failed',
+    provider: 'openai',
+    retryable: false,
+    message: 'OpenAI API key is not configured.',
+  })
 }
 
 function composePromptWithContext(

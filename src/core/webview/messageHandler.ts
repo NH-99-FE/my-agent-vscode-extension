@@ -19,7 +19,7 @@ interface InFlightRequest {
  */
 export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): vscode.Disposable {
   const sessionStore = new SessionStore(context)
-  const chatService = new ChatService(llmClient, sessionStore)
+  const chatService = new ChatService(llmClient, sessionStore, context)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求。
   const inFlightBySession = new Map<string, InFlightRequest>()
 
@@ -36,7 +36,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
         // 最小联通验证：收到 ping 即回 pong，带 requestId 便于前端做请求匹配。
         await postTypedMessage(panel, {
           type: 'pong',
-          ...(parsedMessage.requestId ? { requestId: parsedMessage.requestId } : {}),
+          ...(parsedMessage.requestId !== undefined ? { requestId: parsedMessage.requestId } : {}),
           payload: {
             timestamp: Date.now(),
           },
@@ -85,7 +85,7 @@ async function handleChatSend(
         case 'text-delta':
           await postTypedMessage(panel, {
             type: 'chat.delta',
-            ...(message.requestId ? { requestId: message.requestId } : {}),
+            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
             payload: {
               sessionId: message.payload.sessionId,
               textDelta: event.delta,
@@ -95,7 +95,7 @@ async function handleChatSend(
         case 'done':
           await postTypedMessage(panel, {
             type: 'chat.done',
-            ...(message.requestId ? { requestId: message.requestId } : {}),
+            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
             payload: {
               sessionId: message.payload.sessionId,
               finishReason: event.finishReason,
@@ -105,7 +105,7 @@ async function handleChatSend(
         case 'error':
           await postTypedMessage(panel, {
             type: 'chat.error',
-            ...(message.requestId ? { requestId: message.requestId } : {}),
+            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
             payload: {
               sessionId: message.payload.sessionId,
               message: event.message,
@@ -119,7 +119,7 @@ async function handleChatSend(
       // 取消场景走 done(cancelled)，而不是 error。
       await postTypedMessage(panel, {
         type: 'chat.done',
-        ...(message.requestId ? { requestId: message.requestId } : {}),
+        ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
         payload: {
           sessionId: message.payload.sessionId,
           finishReason: 'cancelled',
@@ -131,7 +131,7 @@ async function handleChatSend(
     if (error instanceof LlmTimeoutError) {
       await postTypedMessage(panel, {
         type: 'chat.error',
-        ...(message.requestId ? { requestId: message.requestId } : {}),
+        ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
         payload: {
           sessionId: message.payload.sessionId,
           message: error.message,
@@ -143,7 +143,7 @@ async function handleChatSend(
     const errorMessage = error instanceof Error ? error.message : 'Unknown chat error.'
     await postTypedMessage(panel, {
       type: 'chat.error',
-      ...(message.requestId ? { requestId: message.requestId } : {}),
+      ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
       payload: {
         sessionId: message.payload.sessionId,
         message: errorMessage,
@@ -212,7 +212,7 @@ async function handleContextFilesPick(
 async function postSystemError(panel: vscode.WebviewPanel, message: string, requestId?: string): Promise<void> {
   await postTypedMessage(panel, {
     type: 'system.error',
-    ...(requestId ? { requestId } : {}),
+    ...(requestId !== undefined ? { requestId } : {}),
     payload: { message },
   })
 }
@@ -252,7 +252,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       }
       const pingMessage: WebviewToExtensionMessage = {
         type: 'ping',
-        ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
         ...(parsedPayload ? { payload: parsedPayload } : {}),
       }
       return pingMessage
@@ -273,7 +273,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
 
       const chatSendMessage: WebviewToExtensionMessage = {
         type: 'chat.send',
-        ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
         payload: {
           sessionId,
           text,
@@ -295,7 +295,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
 
       const chatCancelMessage: WebviewToExtensionMessage = {
         type: 'chat.cancel',
-        ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
         payload: {
           sessionId: payload.sessionId,
         },
