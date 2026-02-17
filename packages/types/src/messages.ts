@@ -7,6 +7,19 @@ export interface MessageMeta {
 }
 
 /**
+ * 推理强度等级。
+ */
+export type ReasoningLevel = 'low' | 'medium' | 'high' | 'ultra'
+
+/**
+ * 用户附加的上下文文件描述。
+ */
+export interface ChatAttachment {
+  path: string
+  name: string
+}
+
+/**
  * 前端 -> 扩展：连通性探活消息。
  */
 export interface PingMessage extends MessageMeta {
@@ -33,6 +46,18 @@ export interface ChatSendMessage extends MessageMeta {
      * 用户输入的原始文本。
      */
     text: string
+    /**
+     * 前端选择的目标模型标识。
+     */
+    model: string
+    /**
+     * 推理强度等级。
+     */
+    reasoningLevel: ReasoningLevel
+    /**
+     * 参与本次请求的附件列表。
+     */
+    attachments: ChatAttachment[]
   }
 }
 

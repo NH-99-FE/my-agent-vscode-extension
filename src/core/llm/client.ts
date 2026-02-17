@@ -1,3 +1,5 @@
+import type { ReasoningLevel } from '@agent/types'
+
 /**
  * LLM 提供方枚举。
  * 目前先提供 mock，后续可扩展 openai/anthropic。
@@ -18,6 +20,7 @@ export interface LlmChatMessage {
 export interface LlmStreamRequest {
   provider: LlmProvider
   model: string
+  reasoningLevel: ReasoningLevel
   sessionId: string
   messages: LlmChatMessage[]
   temperature?: number
@@ -149,7 +152,7 @@ const TIMEOUT_REASON = '__timeout__'
 export class MockLlmProvider implements LlmProviderAdapter {
   async *streamChat(request: LlmStreamRequest): AsyncGenerator<LlmStreamEvent> {
     const userPrompt = getLastUserMessage(request.messages)
-    const responseText = buildMockResponse(userPrompt, request.model)
+    const responseText = buildMockResponse(userPrompt, request.model, request.reasoningLevel)
     const tokens = tokenizeForStreaming(responseText)
 
     for (const token of tokens) {
@@ -237,20 +240,17 @@ function createTimeoutController(timeoutMs?: number): LlmCancellationController 
   return controller
 }
 
-function mergeSignals(
-  primary?: LlmCancellationSignal,
-  secondary?: LlmCancellationSignal,
-): LlmCancellationSignal | undefined {
+function mergeSignals(primary?: LlmCancellationSignal, secondary?: LlmCancellationSignal): LlmCancellationSignal | undefined {
   if (!primary && !secondary) {
     return undefined
   }
 
   const merged = new LlmCancellationController()
   // 任一上游信号取消，合并信号立即取消。
-  const offPrimary = primary?.onCancel((reason) => {
+  const offPrimary = primary?.onCancel(reason => {
     merged.cancel(reason)
   })
-  const offSecondary = secondary?.onCancel((reason) => {
+  const offSecondary = secondary?.onCancel(reason => {
     merged.cancel(reason)
   })
 
@@ -284,12 +284,15 @@ async function sleep(ms: number, signal?: LlmCancellationSignal): Promise<void> 
   assertNotCancelled(signal)
 
   await new Promise<void>((resolve, reject) => {
-    const handle = setTimeout(() => {
-      offCancel?.()
-      resolve()
-    }, Math.max(0, ms))
+    const handle = setTimeout(
+      () => {
+        offCancel?.()
+        resolve()
+      },
+      Math.max(0, ms)
+    )
 
-    const offCancel = signal?.onCancel((reason) => {
+    const offCancel = signal?.onCancel(reason => {
       clearTimeout(handle)
       reject(new LlmAbortError(reason ?? 'LLM request cancelled.'))
     })
@@ -306,11 +309,11 @@ function getLastUserMessage(messages: LlmChatMessage[]): string {
   return ''
 }
 
-function buildMockResponse(userPrompt: string, model: string): string {
+function buildMockResponse(userPrompt: string, model: string, reasoningLevel: ReasoningLevel): string {
   if (!userPrompt.trim()) {
-    return `[mock:${model}] Ready. Please send a prompt.`
+    return `[mock:${model}|reasoning:${reasoningLevel}] Ready. Please send a prompt.`
   }
-  return `[mock:${model}] ${userPrompt}`
+  return `[mock:${model}|reasoning:${reasoningLevel}] ${userPrompt}`
 }
 
 function tokenizeForStreaming(text: string): string[] {

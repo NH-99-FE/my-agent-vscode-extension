@@ -17,6 +17,7 @@ declare module 'vscode' {
     readonly fsPath: string
     readonly path: string
     toString(): string
+    static file(path: string): Uri
     static joinPath(base: Uri, ...pathSegments: string[]): Uri
   }
 

@@ -59,17 +59,20 @@
 
 - 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
-- 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。
-- 消息路由层：`messageHandler` 已实现入站消息校验、类型分发、统一错误回包。
+- 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`。
+- 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。
 - LLM 流式层：已实现最小可用 `LlmClient`（当前 `mock` provider），支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
-- 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略）。
+- 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
+- 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略），并新增附件上下文读取与拼装（文本读取、截断、二进制识别、失败跳过）。
 - 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
 - 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
+- Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构（当前 mock 已可观测回显）。
 
 当前后端可用状态：
 
 - 可完整打通 `chat.send -> 流式 delta -> done/error` 链路。
+- 可在 `chat.send` 中携带模型、推理强度、附件上下文并完成后端消费。
 - 可对进行中的会话请求执行取消。
 - 可在后端保存并更新会话内容。
 
@@ -84,6 +87,88 @@
 - 顶部栏与列表联动：支持通过“历史记录”图标与“查看全部”入口打开同一历史卡片，并在 thread/detail 页面复用。
 - 上下文文件附件区：已新增 `AddContextFiles` 组件，支持通过扩展侧文件选择器添加、展示为 chip、单项删除、去重与数量上限（20）。
 - 附件布局：附件区采用 `flex-wrap` 自动换行，不使用横向滚动条。
+
+## 前后端分工开发计划（并行会话版）
+
+以下内容用于前端会话与后端会话并行推进时的对齐基线，按「已完成 / 代办 / 注意事项」维护。
+
+### 一、前端（Webview UI）分工
+
+#### 1) 已完成
+
+- `Composer` 已具备输入区、模型选择、推理强度选择、发送按钮基础 UI。
+- 已实现 `AddContextFiles` 附件区组件（添加后展示 chip、删除、自动换行）。
+- 已接入附件选择触发：点击 `+` 发送 `context.files.pick` 请求。
+- 已接入附件结果消费：监听 `context.files.picked` 回包并写入本地附件状态（去重、上限 20）。
+- 历史卡片 `HistorySearchCard` 已实现 `Command` 搜索、悬停删除、外部点击关闭。
+- 顶部栏历史图标与“查看全部”入口已联动打开历史卡片。
+
+#### 2) 代办
+
+- 将真实发送链路接入前端：
+  - `chat.send` 发送时携带当前模型、推理强度、附件列表。
+  - 与后端新增协议字段对齐（避免前后端 payload 偏差）。
+- 完成会话维度状态管理收敛：
+  - 将 `Composer` 内请求/流式状态逐步下沉到独立 store/service。
+  - 历史记录点击后恢复对应会话上下文。
+- 错误态体验补齐：
+  - 附件超过上限提示、文件读取失败提示、provider 不可用提示。
+- 历史卡片数据源从 mock 切换到真实会话数据。
+
+#### 3) 注意事项
+
+- 前端不得直接依赖扩展内部实现，所有通信必须通过 `@agent/types` 协议消息。
+- `bridge.onMessage` 必须在 `useEffect` 中返回 dispose，避免重复监听。
+- `Composer` 当前已有较多状态，新增逻辑优先抽离到 `features/thread` 的服务层，避免组件继续膨胀。
+- 附件“发送成功后清空”仅在成功完成时触发（`chat.done` 的成功结束态），取消/错误保留。
+
+### 二、后端（Extension Core）分工
+
+#### 1) 已完成
+
+- Webview 消息路由与严格解析已落地，支持 `ping/chat.send/chat.cancel`。
+- `chat.send` 协议扩展与消费已落地：
+  - 入站新增 `model`、`reasoningLevel`、`attachments` 严格校验
+  - `model/reasoningLevel` 已下传 provider 请求参数
+  - 附件内容已纳入上下文构建与 prompt 组装（失败文件按“部分成功继续”策略跳过）
+- 已新增文件选择通道处理：
+  - 处理 `context.files.pick`
+  - 调用 `vscode.window.showOpenDialog`
+  - 回包 `context.files.picked`
+- LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。
+- `ChatService` 已新增并接入主链路，handler 维持轻量路由职责。
+- 会话持久化与密钥管理已有基础实现（`SessionStore`、`SecretStorage`）。
+
+#### 2) 代办
+
+- 实现双供应商 provider 适配层：
+  - 统一 adapter 接口与错误归一化。
+  - 首批接入两家 provider（如 OpenAI / Anthropic）。
+- 完善会话服务边界：
+  - 将会话查询、更新、恢复等非发送路径从 handler/调用点进一步收敛到 service 层。
+- 增加协议与 handler 回归测试（重点覆盖 parseInboundMessage 与异常分支）。
+
+#### 3) 注意事项
+
+- `messageHandler` 继续保持“路由层”职责，业务逻辑优先下沉 service，避免单文件变成 God object。
+- 新增协议字段时必须同步：
+  - `packages/types/src/messages.ts`
+  - `packages/types/src/index.ts`
+  - `webview-ui/src/lib/bridge.ts` runtime 白名单（如涉及 extension -> webview 新消息）
+- 所有新增消息都要有 requestId 透传策略，便于前端做请求级关联。
+
+### 三、前后端协同约定
+
+- 协议变更顺序：先改 `@agent/types`，再分别改前后端实现，最后更新 `bridge.README.md` 与本文档。
+- 并行开发时每个阶段至少保证以下可回归命令通过：
+  1. `pnpm -C packages/types typecheck`
+  2. `pnpm -C webview-ui typecheck`
+  3. `pnpm typecheck:ext`
+- 若出现类型解析问题（如 `@agent/types`），优先检查各子工程 `tsconfig` 的 `paths` 对齐，不要在业务代码里绕过类型系统。
+- 严格遵守高内聚低耦合：
+  - UI 组件只处理展示和交互，不承载协议编排细节。
+  - 扩展消息处理层只做校验和路由，不直接承载 provider 细节。
+  - provider 能力通过抽象接口注册，不把供应商 SDK 细节泄漏到上层。
 
 当前未完成项（有意留待后续）：
 

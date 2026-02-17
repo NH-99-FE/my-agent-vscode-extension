@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
-import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '@agent/types'
-import { buildContextFromActiveEditor } from '../context/contextBuilder'
+import type { ChatAttachment, ExtensionToWebviewMessage, ReasoningLevel, WebviewToExtensionMessage } from '@agent/types'
+import { ChatService } from '../chat/chatService'
 import { createLlmClient, LlmAbortError, LlmCancellationController, LlmTimeoutError } from '../llm/client'
 import { SessionStore } from '../storage/sessionStore'
 
@@ -19,6 +19,7 @@ interface InFlightRequest {
  */
 export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): vscode.Disposable {
   const sessionStore = new SessionStore(context)
+  const chatService = new ChatService(llmClient, sessionStore)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求。
   const inFlightBySession = new Map<string, InFlightRequest>()
 
@@ -42,7 +43,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
         })
         break
       case 'chat.send':
-        await handleChatSend(panel, parsedMessage, sessionStore, inFlightBySession)
+        await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
         break
       case 'chat.cancel':
         await handleChatCancel(panel, parsedMessage, inFlightBySession)
@@ -63,7 +64,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
 async function handleChatSend(
   panel: vscode.WebviewPanel,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.send' }>,
-  sessionStore: SessionStore,
+  chatService: ChatService,
   inFlightBySession: Map<string, InFlightRequest>
 ): Promise<void> {
   // 用户连续发送同一会话请求时，先取消旧流，防止并发回包乱序。
@@ -76,28 +77,12 @@ async function handleChatSend(
   })
 
   try {
-    // 先落用户消息，保证会话持久化顺序正确。
-    await sessionStore.appendUserMessage(message.payload.sessionId, message.payload.text)
-
-    const builtContext = buildContextFromActiveEditor()
-    const promptWithContext = composePromptWithContext(message.payload.text, builtContext.snippets)
-
-    const stream = llmClient.streamChat({
-      provider: 'mock',
-      model: 'mock-gpt',
-      sessionId: message.payload.sessionId,
-      messages: [{ role: 'user', content: promptWithContext }],
-      timeoutMs: 30_000,
-      maxRetries: 1,
-      retryDelayMs: 200,
-      signal: controller.signal,
-    })
+    const stream = chatService.streamChat(message.payload, controller.signal)
 
     // 消费 LLM 流并映射到 Webview 协议事件。
     for await (const event of stream) {
       switch (event.type) {
         case 'text-delta':
-          await sessionStore.appendAssistantDelta(message.payload.sessionId, event.delta)
           await postTypedMessage(panel, {
             type: 'chat.delta',
             ...(message.requestId ? { requestId: message.requestId } : {}),
@@ -118,7 +103,6 @@ async function handleChatSend(
           })
           break
         case 'error':
-          await sessionStore.appendAssistantError(message.payload.sessionId, event.message)
           await postTypedMessage(panel, {
             type: 'chat.error',
             ...(message.requestId ? { requestId: message.requestId } : {}),
@@ -145,8 +129,6 @@ async function handleChatSend(
     }
 
     if (error instanceof LlmTimeoutError) {
-      // 超时作为错误上报，并落库到会话。
-      await sessionStore.appendAssistantError(message.payload.sessionId, error.message)
       await postTypedMessage(panel, {
         type: 'chat.error',
         ...(message.requestId ? { requestId: message.requestId } : {}),
@@ -159,7 +141,6 @@ async function handleChatSend(
     }
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown chat error.'
-    await sessionStore.appendAssistantError(message.payload.sessionId, errorMessage)
     await postTypedMessage(panel, {
       type: 'chat.error',
       ...(message.requestId ? { requestId: message.requestId } : {}),
@@ -225,22 +206,6 @@ async function handleContextFilesPick(
   })
 }
 
-function composePromptWithContext(userText: string, snippets: Array<{ source: string; filePath: string; content: string }>): string {
-  if (snippets.length === 0) {
-    return userText
-  }
-
-  const contextBlock = snippets
-    .map((snippet, index) => {
-      return [`### Context ${index + 1}`, `source: ${snippet.source}`, `file: ${snippet.filePath}`, '```', snippet.content, '```'].join(
-        '\n'
-      )
-    })
-    .join('\n\n')
-
-  return [`User request:\n${userText}`, `Attached context:\n${contextBlock}`].join('\n\n')
-}
-
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
@@ -282,6 +247,9 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
   switch (maybeMessage.type) {
     case 'ping': {
       const parsedPayload = asOptionalObjectWithOptionalNumberTimestamp(maybeMessage.payload)
+      if (maybeMessage.payload !== undefined && !parsedPayload) {
+        return undefined
+      }
       const pingMessage: WebviewToExtensionMessage = {
         type: 'ping',
         ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
@@ -294,15 +262,24 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
         return undefined
       }
       const payload = maybeMessage.payload as Record<string, unknown>
-      if (typeof payload.sessionId !== 'string' || typeof payload.text !== 'string') {
+      const sessionId = asNonEmptyString(payload.sessionId)
+      const text = asString(payload.text)
+      const model = asNonEmptyString(payload.model)
+      const reasoningLevel = asReasoningLevel(payload.reasoningLevel)
+      const attachments = asAttachments(payload.attachments)
+      if (!sessionId || text === undefined || !model || !reasoningLevel || !attachments) {
         return undefined
       }
+
       const chatSendMessage: WebviewToExtensionMessage = {
         type: 'chat.send',
         ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
         payload: {
-          sessionId: payload.sessionId,
-          text: payload.text,
+          sessionId,
+          text,
+          model,
+          reasoningLevel,
+          attachments,
         },
       }
       return chatSendMessage
@@ -364,4 +341,53 @@ function asOptionalObjectWithOptionalNumberTimestamp(value: unknown): { timestam
     return { timestamp: payload.timestamp }
   }
   return {}
+}
+
+function asString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  return value
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const normalized = value.trim()
+  if (!normalized) {
+    return undefined
+  }
+  return normalized
+}
+
+function asReasoningLevel(value: unknown): ReasoningLevel | undefined {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'ultra') {
+    return value
+  }
+  return undefined
+}
+
+function asAttachments(value: unknown): ChatAttachment[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const attachments: ChatAttachment[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      return undefined
+    }
+
+    const maybeAttachment = item as Record<string, unknown>
+    const path = asNonEmptyString(maybeAttachment.path)
+    const name = asNonEmptyString(maybeAttachment.name)
+    if (!path || !name) {
+      return undefined
+    }
+
+    attachments.push({ path, name })
+  }
+
+  return attachments
 }
