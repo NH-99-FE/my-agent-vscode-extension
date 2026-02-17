@@ -5,7 +5,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@agent/types": ["../packages/types/src/index.ts"],
+      "@agent/types/*": ["../packages/types/src/*"]
     },
     "types": ["vite/client"],
     "noEmit": true,
