@@ -16,6 +16,11 @@ export class SessionStore {
     return this.context.workspaceState.get<ChatSession[]>(SESSION_LIST_KEY, [])
   }
 
+  async getSessionById(sessionId: string): Promise<ChatSession | undefined> {
+    const sessions = await this.getSessions()
+    return sessions.find(item => item.id === sessionId)
+  }
+
   async setActiveSessionId(sessionId: string): Promise<void> {
     await this.context.workspaceState.update(ACTIVE_SESSION_ID_KEY, sessionId)
   }

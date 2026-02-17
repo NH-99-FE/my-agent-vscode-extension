@@ -1,6 +1,6 @@
 import type { ChatAttachment, ContextSnippet, ReasoningLevel } from '@agent/types'
 import * as vscode from 'vscode'
-import type { LlmCancellationSignal, LlmClient, LlmStreamEvent } from '../llm/client'
+import type { LlmCancellationSignal, LlmChatMessage, LlmClient, LlmStreamEvent } from '../llm/client'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmProvider } from '../llm/client'
 import type { AttachmentSnippet, SkippedAttachment } from '../context/attachmentContext'
 import { buildAttachmentContext } from '../context/attachmentContext'
@@ -43,6 +43,7 @@ export class ChatService {
       attachmentContext.snippets,
       attachmentContext.skipped
     )
+    const llmMessages = await buildLlmMessagesForCurrentTurn(this.sessionStore, request.sessionId, request.text, promptWithContext)
     let provider: LlmProvider = 'mock'
 
     try {
@@ -55,7 +56,7 @@ export class ChatService {
         reasoningLevel: request.reasoningLevel,
         sessionId: request.sessionId,
         ...(openAiRequestOptions ?? {}),
-        messages: [{ role: 'user', content: promptWithContext }],
+        messages: llmMessages,
         timeoutMs: this.options.timeoutMs ?? 30_000,
         maxRetries: this.options.maxRetries ?? 1,
         retryDelayMs: this.options.retryDelayMs ?? 200,
@@ -159,9 +160,7 @@ async function inferAutoProvider(context: vscode.ExtensionContext, model: string
   })
 }
 
-async function buildOpenAiRequestOptions(
-  context: vscode.ExtensionContext
-): Promise<{ apiKey: string; baseUrl?: string }> {
+async function buildOpenAiRequestOptions(context: vscode.ExtensionContext): Promise<{ apiKey: string; baseUrl?: string }> {
   const baseUrl = getOpenAiBaseUrlFromConfig()
   const apiKey = await getOpenAIApiKey(context)
   if (!apiKey) {
@@ -228,4 +227,43 @@ function composePromptWithContext(
   }
 
   return sections.join('\n\n')
+}
+
+async function buildLlmMessagesForCurrentTurn(
+  sessionStore: SessionStore,
+  sessionId: string,
+  currentUserText: string,
+  currentPromptWithContext: string
+): Promise<LlmChatMessage[]> {
+  try {
+    const session = await sessionStore.getSessionById(sessionId)
+    if (!session || session.messages.length === 0) {
+      return [{ role: 'user', content: currentPromptWithContext }]
+    }
+
+    const historyMessages = session.messages
+      .filter(message => message.role === 'user' || message.role === 'assistant')
+      .filter(message => !(message.role === 'assistant' && message.content.startsWith('[error] ')))
+      .map<LlmChatMessage>(message => ({
+        role: message.role,
+        content: message.content,
+      }))
+
+    // appendUserMessage 已在本轮开始时写入 currentUserText，这里移除末尾那条原文防重复。
+    const lastHistoryMessage = historyMessages[historyMessages.length - 1]
+    if (lastHistoryMessage?.role === 'user' && lastHistoryMessage.content === currentUserText) {
+      historyMessages.pop()
+    }
+
+    return [
+      ...historyMessages,
+      {
+        role: 'user',
+        content: currentPromptWithContext,
+      },
+    ]
+  } catch {
+    // 历史读取异常时降级为单轮模式，保证主链路可用。
+    return [{ role: 'user', content: currentPromptWithContext }]
+  }
 }
