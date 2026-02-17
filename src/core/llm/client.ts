@@ -13,41 +13,29 @@ import { MockProviderAdapter } from './providers/mockAdapter'
 import { OpenAIProviderAdapter } from './providers/openaiAdapter'
 import type { ProviderRegistry } from './providers/types'
 
-/**
- * LLM 提供方枚举。
- */
+// LLM 提供方枚举
 export type LlmProvider = 'mock' | 'openai'
 
-/**
- * 聊天消息输入结构（扩展侧内部使用）。
- */
+// 聊天消息输入结构（扩展侧内部使用）
 export interface LlmChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
+  role: 'system' | 'user' | 'assistant' | 'tool' // 消息角色
+  content: string // 消息内容
 }
 
-/**
- * 流式调用请求参数。
- */
+// 流式调用请求参数
 export interface LlmStreamRequest {
-  provider: LlmProvider
-  model: string
-  reasoningLevel: ReasoningLevel
-  sessionId: string
-  messages: LlmChatMessage[]
-  /**
-   * Provider 访问密钥（按 provider 决定是否必填）。
-   */
-  apiKey?: string
-  /**
-   * OpenAI 兼容网关基础地址（可选）。
-   */
-  baseUrl?: string
-  temperature?: number
-  timeoutMs?: number
-  maxRetries?: number
-  retryDelayMs?: number
-  signal?: LlmCancellationSignal
+  provider: LlmProvider // LLM 提供方
+  model: string // 模型名称
+  reasoningLevel: ReasoningLevel // 推理强度
+  sessionId: string // 会话 ID
+  messages: LlmChatMessage[] // 消息历史
+  apiKey?: string // Provider 访问密钥（按 provider 决定是否必填）
+  baseUrl?: string // OpenAI 兼容网关基础地址（可选）
+  temperature?: number // 温度参数
+  timeoutMs?: number // 超时时间（毫秒）
+  maxRetries?: number // 最大重试次数
+  retryDelayMs?: number // 重试延迟（毫秒）
+  signal?: LlmCancellationSignal // 取消信号
 }
 
 /**

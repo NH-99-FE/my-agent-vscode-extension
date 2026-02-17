@@ -6,14 +6,20 @@ import { createLlmClient, LlmAbortError, LlmCancellationController, LlmTimeoutEr
 import { SettingsService } from '../settings/settingsService'
 import { SessionStore } from '../storage/sessionStore'
 
+// 全局 LLM 客户端实例
 const llmClient = createLlmClient()
 
+// 进行中的请求信息
 interface InFlightRequest {
   controller: LlmCancellationController
 }
 
 /**
- * 注册 Webview -> Extension 的消息处理器。
+ * 注册 Webview -> Extension 的消息处理器
+ * @param panel Webview 面板
+ * @param context VS Code 扩展上下文
+ * @returns 可释放的资源
+ *
  * 职责：
  * 1. 做基本结构校验（避免异常 payload 导致运行时崩溃）
  * 2. 根据 type 路由到对应处理逻辑
@@ -24,7 +30,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
   const chatService = new ChatService(llmClient, sessionStore, context)
   const sessionService = new SessionService(sessionStore)
   const settingsService = new SettingsService(context)
-  // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求。
+  // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求
   const inFlightBySession = new Map<string, InFlightRequest>()
 
   return panel.webview.onDidReceiveMessage(async (message: unknown) => {
@@ -443,12 +449,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       if (payload.openaiModels !== undefined && openaiModels === undefined) {
         return undefined
       }
-      if (
-        providerDefault === undefined &&
-        openaiBaseUrl === undefined &&
-        openaiDefaultModel === undefined &&
-        openaiModels === undefined
-      ) {
+      if (providerDefault === undefined && openaiBaseUrl === undefined && openaiDefaultModel === undefined && openaiModels === undefined) {
         return undefined
       }
 
@@ -511,6 +512,11 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
   }
 }
 
+/**
+ * 将未知值转换为可选对象，包含可选的时间戳
+ * @param value 待转换的值
+ * @returns 转换后的对象或 undefined
+ */
 function asOptionalObjectWithOptionalNumberTimestamp(value: unknown): { timestamp?: number } | undefined {
   if (value === undefined) {
     return undefined
@@ -529,6 +535,11 @@ function asOptionalObjectWithOptionalNumberTimestamp(value: unknown): { timestam
   return {}
 }
 
+/**
+ * 将未知值转换为字符串
+ * @param value 待转换的值
+ * @returns 转换后的字符串或 undefined
+ */
 function asString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
@@ -536,6 +547,11 @@ function asString(value: unknown): string | undefined {
   return value
 }
 
+/**
+ * 将未知值转换为非空字符串
+ * @param value 待转换的值
+ * @returns 转换后的非空字符串或 undefined
+ */
 function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
@@ -547,6 +563,11 @@ function asNonEmptyString(value: unknown): string | undefined {
   return normalized
 }
 
+/**
+ * 将未知值转换为推理强度等级
+ * @param value 待转换的值
+ * @returns 转换后的推理强度或 undefined
+ */
 function asReasoningLevel(value: unknown): ReasoningLevel | undefined {
   if (value === 'low' || value === 'medium' || value === 'high' || value === 'ultra') {
     return value
@@ -554,6 +575,11 @@ function asReasoningLevel(value: unknown): ReasoningLevel | undefined {
   return undefined
 }
 
+/**
+ * 将未知值转换为附件数组
+ * @param value 待转换的值
+ * @returns 转换后的附件数组或 undefined
+ */
 function asAttachments(value: unknown): ChatAttachment[] | undefined {
   if (!Array.isArray(value)) {
     return undefined
@@ -578,6 +604,11 @@ function asAttachments(value: unknown): ChatAttachment[] | undefined {
   return attachments
 }
 
+/**
+ * 将未知值转换为默认 provider
+ * @param value 待转换的值
+ * @returns 转换后的 provider 或 undefined
+ */
 function asProviderDefault(value: unknown): ProviderDefault | undefined {
   if (value === 'auto' || value === 'mock' || value === 'openai') {
     return value
@@ -585,6 +616,11 @@ function asProviderDefault(value: unknown): ProviderDefault | undefined {
   return undefined
 }
 
+/**
+ * 将未知值转换为字符串数组
+ * @param value 待转换的值
+ * @returns 转换后的字符串数组或 undefined
+ */
 function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined
@@ -601,6 +637,11 @@ function asStringArray(value: unknown): string[] | undefined {
   return normalized
 }
 
+/**
+ * 检查值是否为空对象
+ * @param value 待检查的值
+ * @returns 是否为空对象
+ */
 function isEmptyObject(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) {
     return false

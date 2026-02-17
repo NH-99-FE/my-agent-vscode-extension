@@ -1,13 +1,18 @@
 import type { ExtensionToWebviewMessage, ChatDoneMessage } from '@agent/types'
 
-export type ThreadSessionMessageActions = {
-  appendAssistantDelta: (sessionId: string, textDelta: string) => void
-  completeAssistantMessage: (sessionId: string, finishReason: ChatDoneMessage['payload']['finishReason']) => void
-  setAssistantError: (sessionId: string, errorMessage: string) => void
+// 线程会话消息操作接口
+type ThreadSessionMessageActions = {
+  appendAssistantDelta: (sessionId: string, textDelta: string) => void // 追加助手消息增量
+  completeAssistantMessage: (sessionId: string, finishReason: ChatDoneMessage['payload']['finishReason']) => void // 完成助手消息
+  setAssistantError: (sessionId: string, errorMessage: string) => void // 设置助手消息错误
 }
 
 /**
- * 将扩展回包映射为会话消息状态更新：
+ * 将扩展回包映射为会话消息状态更新
+ * @param message 扩展发送的消息
+ * @param actions 线程会话消息操作接口
+ *
+ * 映射关系：
  * - chat.delta -> 助手消息增量拼接
  * - chat.done -> 助手消息收尾
  * - chat.error -> 助手消息错误态

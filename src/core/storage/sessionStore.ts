@@ -1,30 +1,53 @@
 import type { ChatMessage, ChatSession } from '@agent/types'
 import * as vscode from 'vscode'
 
+// 会话列表存储键
 const SESSION_LIST_KEY = 'agent.chat.sessions'
+// 活跃会话 ID 存储键
 const ACTIVE_SESSION_ID_KEY = 'agent.chat.activeSessionId'
 
 /**
- * 会话存储：
- * - 基于 workspaceState 持久化会话列表
- * - 提供最小增量写入能力（用户消息、助手增量）
+ * 会话存储类
+ * 基于 workspaceState 持久化会话列表
+ * 提供最小增量写入能力（用户消息、助手增量）
  */
 export class SessionStore {
+  /**
+   * 构造函数
+   * @param context VS Code 扩展上下文
+   */
   constructor(private readonly context: vscode.ExtensionContext) {}
 
+  /**
+   * 获取所有会话
+   * @returns 会话列表
+   */
   async getSessions(): Promise<ChatSession[]> {
     return this.context.workspaceState.get<ChatSession[]>(SESSION_LIST_KEY, [])
   }
 
+  /**
+   * 根据 ID 获取会话
+   * @param sessionId 会话 ID
+   * @returns 会话对象或 undefined
+   */
   async getSessionById(sessionId: string): Promise<ChatSession | undefined> {
     const sessions = await this.getSessions()
     return sessions.find(item => item.id === sessionId)
   }
 
+  /**
+   * 设置活跃会话 ID
+   * @param sessionId 会话 ID
+   */
   async setActiveSessionId(sessionId: string): Promise<void> {
     await this.context.workspaceState.update(ACTIVE_SESSION_ID_KEY, sessionId)
   }
 
+  /**
+   * 获取活跃会话 ID
+   * @returns 会话 ID 或 undefined
+   */
   async getActiveSessionId(): Promise<string | undefined> {
     return this.context.workspaceState.get<string>(ACTIVE_SESSION_ID_KEY)
   }

@@ -1,53 +1,52 @@
 import { create } from 'zustand'
 import type { ChatDoneMessage } from '@agent/types'
 
+// 消息角色：用户或助手
 export type ThreadMessageRole = 'user' | 'assistant'
+// 消息状态：流式中、已完成、错误
 export type ThreadMessageStatus = 'streaming' | 'done' | 'error'
+// 结束原因类型（来自后端 ChatDoneMessage）
 type ThreadFinishReason = ChatDoneMessage['payload']['finishReason']
 
+// 单条聊天消息
 export type ThreadMessageItem = {
-  id: string
-  role: ThreadMessageRole
-  text: string
-  createdAt: number
-  status: ThreadMessageStatus
-  finishReason?: ThreadFinishReason
-  errorMessage?: string
+  id: string // 消息唯一 ID
+  role: ThreadMessageRole // 角色：用户或助手
+  text: string // 消息文本内容
+  createdAt: number // 创建时间戳（毫秒）
+  status: ThreadMessageStatus // 当前状态
+  finishReason?: ThreadFinishReason // 结束原因（仅已完成/错误态有效）
+  errorMessage?: string // 错误信息（仅错误态有效）
 }
 
+// 单个会话的状态：消息列表 + 会话级错误
 type ThreadSessionState = {
-  /** 当前会话内的消息列表（用户 + 助手）。 */
-  messages: ThreadMessageItem[]
-  /** 会话级错误提示（用于详情页顶部提示）。 */
-  error: string | null
+  messages: ThreadMessageItem[] // 当前会话内的消息列表（用户 + 助手）
+  error: string | null // 会话级错误提示（用于详情页顶部提示）
 }
 
+// 会话存储全局状态，按 sessionId 隔离数据，防止跨会话污染
 type ThreadSessionStoreState = {
-  /** 按 sessionId 维护会话消息，避免跨会话串数据。 */
-  sessionsById: Record<string, ThreadSessionState>
-  /** 当前正在流式输出的助手消息 id（按会话隔离）。 */
-  activeAssistantMessageIdBySession: Record<string, string | undefined>
+  sessionsById: Record<string, ThreadSessionState> // 按 sessionId 维护会话消息，避免跨会话串数据
+  activeAssistantMessageIdBySession: Record<string, string | undefined> // 当前正在流式输出的助手消息 id（按会话隔离）
 }
 
+// 会话存储操作方法，负责消息的写入、流式增量拼接、完成/错误状态更新
 type ThreadSessionStoreActions = {
-  /** 确保会话已初始化（无消息时也创建空壳）。 */
-  ensureSession: (sessionId: string) => void
-  /** 追加用户消息（发送时写入）。 */
-  appendUserMessage: (sessionId: string, text: string) => void
-  /** 消费 chat.delta，将增量拼接到助手消息。 */
-  appendAssistantDelta: (sessionId: string, textDelta: string) => void
-  /** 消费 chat.done，更新助手消息结束态。 */
-  completeAssistantMessage: (sessionId: string, finishReason: ThreadFinishReason) => void
-  /** 消费 chat.error，标记助手消息错误。 */
-  setAssistantError: (sessionId: string, errorMessage: string) => void
-  /** 设置会话级错误（用于详情页错误提示）。 */
-  setSessionError: (sessionId: string, error: string | null) => void
+  ensureSession: (sessionId: string) => void // 确保会话已初始化（无消息时也创建空壳）
+  appendUserMessage: (sessionId: string, text: string) => void // 追加用户消息（发送时写入）
+  appendAssistantDelta: (sessionId: string, textDelta: string) => void // 消费 chat.delta，将增量拼接到助手消息
+  completeAssistantMessage: (sessionId: string, finishReason: ThreadFinishReason) => void // 消费 chat.done，更新助手消息结束态
+  setAssistantError: (sessionId: string, errorMessage: string) => void // 消费 chat.error，标记助手消息错误
+  setSessionError: (sessionId: string, error: string | null) => void // 设置会话级错误（用于详情页错误提示）
 }
 
 type ThreadSessionStore = ThreadSessionStoreState & { actions: ThreadSessionStoreActions }
 
+// 空消息数组引用，避免重复创建
 const EMPTY_MESSAGES: ThreadMessageItem[] = []
 
+// 创建初始会话状态
 function createInitialSessionState(): ThreadSessionState {
   return {
     messages: [],
@@ -55,15 +54,22 @@ function createInitialSessionState(): ThreadSessionState {
   }
 }
 
+// 生成消息唯一 ID（使用 crypto API）
 function createMessageId(): string {
   return crypto.randomUUID()
 }
 
+// 校验 sessionId 是否有效（非空字符串）
 function isValidSessionId(sessionId: string): boolean {
   return sessionId.trim().length > 0
 }
 
-// 保证某个 sessionId 在 sessionsById 中存在。
+/**
+ * 确保会话记录存在，不存在则创建
+ * @param sessionsById 当前会话记录集
+ * @param sessionId 要确保存在的会话 ID
+ * @returns 新的 sessionsById 对象
+ */
 function ensureSessionRecord(sessionsById: Record<string, ThreadSessionState>, sessionId: string): Record<string, ThreadSessionState> {
   if (sessionsById[sessionId]) {
     return sessionsById
@@ -74,11 +80,12 @@ function ensureSessionRecord(sessionsById: Record<string, ThreadSessionState>, s
   }
 }
 
+// 获取会话状态，不存在则返回新建的初始状态
 function getSessionState(sessionsById: Record<string, ThreadSessionState>, sessionId: string): ThreadSessionState {
   return sessionsById[sessionId] ?? createInitialSessionState()
 }
 
-// 用户消息默认是完成态（非流式）。
+/** 创建用户消息，用户消息默认是完成态（非流式） */
 function createUserMessage(text: string): ThreadMessageItem {
   return {
     id: createMessageId(),
@@ -89,6 +96,7 @@ function createUserMessage(text: string): ThreadMessageItem {
   }
 }
 
+// 创建流式中的助手消息
 function createAssistantStreamingMessage(id: string, text: string): ThreadMessageItem {
   return {
     id,
@@ -99,7 +107,10 @@ function createAssistantStreamingMessage(id: string, text: string): ThreadMessag
   }
 }
 
-// 当收到 chat.error 且当前无 active assistant 时，补一条错误消息用于可视化提示。
+/**
+ * 创建错误消息
+ * 当收到 chat.error 且当前无 active assistant 时，补一条错误消息用于可视化提示
+ */
 function createAssistantErrorMessage(errorMessage: string): ThreadMessageItem {
   return {
     id: createMessageId(),
@@ -112,6 +123,7 @@ function createAssistantErrorMessage(errorMessage: string): ThreadMessageItem {
   }
 }
 
+// 将流式增量拼接到消息文本
 function appendStreamingDelta(message: ThreadMessageItem, textDelta: string): ThreadMessageItem {
   return {
     ...message,
@@ -120,6 +132,7 @@ function appendStreamingDelta(message: ThreadMessageItem, textDelta: string): Th
   }
 }
 
+// 完成助手消息流式输出
 function completeAssistantStream(message: ThreadMessageItem, finishReason: ThreadFinishReason): ThreadMessageItem {
   const nextStatus: ThreadMessageStatus = finishReason === 'error' ? 'error' : 'done'
   return {
@@ -129,6 +142,7 @@ function completeAssistantStream(message: ThreadMessageItem, finishReason: Threa
   }
 }
 
+// 标记助手消息为错误态
 function markAssistantStreamError(message: ThreadMessageItem, errorMessage: string): ThreadMessageItem {
   return {
     ...message,
@@ -142,6 +156,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
   sessionsById: {},
   activeAssistantMessageIdBySession: {},
   actions: {
+    /** 确保会话存在，若不存在则初始化空会话 */
     ensureSession: sessionId => {
       if (!isValidSessionId(sessionId)) {
         return
@@ -150,6 +165,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
         sessionsById: ensureSessionRecord(state.sessionsById, sessionId),
       }))
     },
+    /** 追加用户消息，写入后清空会话级错误 */
     appendUserMessage: (sessionId, text) => {
       const normalizedText = text.trim()
       if (!normalizedText || !isValidSessionId(sessionId)) {
@@ -172,6 +188,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
         }
       })
     },
+    /** 处理流式增量，若存在 activeAssistantMessageId 则追加到该消息；否则创建新消息 */
     appendAssistantDelta: (sessionId, textDelta) => {
       if (!isValidSessionId(sessionId) || !textDelta) {
         return
@@ -225,6 +242,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
         }
       })
     },
+    /** 完成助手消息流式，标记结束原因并清理 active 状态 */
     completeAssistantMessage: (sessionId, finishReason) => {
       if (!isValidSessionId(sessionId)) {
         return
@@ -263,6 +281,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
         }
       })
     },
+    /** 处理助手消息错误，若有 active 消息则标记该消息为错误；否则创建一条错误消息 */
     setAssistantError: (sessionId, errorMessage) => {
       if (!isValidSessionId(sessionId)) {
         return
@@ -310,6 +329,7 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
         }
       })
     },
+    /** 设置会话级错误（不影响消息列表） */
     setSessionError: (sessionId, error) => {
       if (!isValidSessionId(sessionId)) {
         return
@@ -332,7 +352,13 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
   },
 }))
 
+// 导出所有 actions
 export const useThreadSessionActions = () => useThreadSessionStore(state => state.actions)
+
+/**
+ * 获取指定会话的消息列表
+ * @param sessionId 会话 ID，传入 undefined 时返回空数组
+ */
 export const useThreadSessionMessages = (sessionId: string | undefined) =>
   useThreadSessionStore(state => {
     if (!sessionId) {
@@ -340,6 +366,11 @@ export const useThreadSessionMessages = (sessionId: string | undefined) =>
     }
     return state.sessionsById[sessionId]?.messages ?? EMPTY_MESSAGES
   })
+
+/**
+ * 获取指定会话的错误信息
+ * @param sessionId 会话 ID，传入 undefined 时返回 null
+ */
 export const useThreadSessionError = (sessionId: string | undefined) =>
   useThreadSessionStore(state => {
     if (!sessionId) {

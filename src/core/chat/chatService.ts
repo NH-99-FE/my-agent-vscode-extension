@@ -9,21 +9,34 @@ import { createUnknownProviderError, formatLlmProviderError } from '../llm/error
 import { getOpenAIApiKey, hasOpenAIApiKey } from '../storage/secrets'
 import { SessionStore } from '../storage/sessionStore'
 
+// 聊天服务请求参数
 export interface ChatServiceRequest {
-  sessionId: string
-  text: string
-  model: string
-  reasoningLevel: ReasoningLevel
-  attachments: ChatAttachment[]
+  sessionId: string // 会话 ID
+  text: string // 用户输入文本
+  model: string // 目标模型
+  reasoningLevel: ReasoningLevel // 推理强度
+  attachments: ChatAttachment[] // 附件列表
 }
 
+// 聊天服务配置选项
 interface ChatServiceOptions {
-  timeoutMs?: number
-  maxRetries?: number
-  retryDelayMs?: number
+  timeoutMs?: number // 超时时间（毫秒）
+  maxRetries?: number // 最大重试次数
+  retryDelayMs?: number // 重试延迟（毫秒）
 }
 
+/**
+ * 聊天服务类
+ * 负责处理聊天请求的核心业务逻辑
+ */
 export class ChatService {
+  /**
+   * 构造函数
+   * @param llmClient LLM 客户端
+   * @param sessionStore 会话存储
+   * @param context VS Code 扩展上下文
+   * @param options 服务配置选项
+   */
   constructor(
     private readonly llmClient: LlmClient,
     private readonly sessionStore: SessionStore,
@@ -31,8 +44,14 @@ export class ChatService {
     private readonly options: ChatServiceOptions = {}
   ) {}
 
+  /**
+   * 流式聊天处理
+   * @param request 聊天请求参数
+   * @param signal 取消信号
+   * @returns 流式事件生成器
+   */
   async *streamChat(request: ChatServiceRequest, signal?: LlmCancellationSignal): AsyncGenerator<LlmStreamEvent> {
-    // 先写入用户消息，保证会话时间线与真实请求顺序一致。
+    // 先写入用户消息，保证会话时间线与真实请求顺序一致
     await this.sessionStore.appendUserMessage(request.sessionId, request.text)
 
     const editorContext = buildContextFromActiveEditor()
@@ -47,7 +66,7 @@ export class ChatService {
     let provider: LlmProvider = 'mock'
 
     try {
-      // provider 选择属于业务策略，固定收敛在 service，避免泄漏到 handler。
+      // provider 选择属于业务策略，固定收敛在 service，避免泄漏到 handler
       provider = await resolveProviderForModel(this.context, request.model)
       const openAiRequestOptions = provider === 'openai' ? await buildOpenAiRequestOptions(this.context) : undefined
       const stream = this.llmClient.streamChat({
@@ -131,6 +150,12 @@ function getConfiguredProvider(): LlmProvider | 'auto' {
   throw createUnknownProviderError(configured)
 }
 
+/**
+ * 推断 mock provider
+ * @param model 模型名称
+ * @returns LLM 提供方
+ * @throws LlmProviderError 当模型不支持时
+ */
 function inferMockProvider(model: string): LlmProvider {
   if (model.startsWith('mock-')) {
     return 'mock'
@@ -143,6 +168,13 @@ function inferMockProvider(model: string): LlmProvider {
   })
 }
 
+/**
+ * 推断自动 provider
+ * @param context VS Code 扩展上下文
+ * @param model 模型名称
+ * @returns LLM 提供方
+ * @throws LlmProviderError 当无法解析 provider 时
+ */
 async function inferAutoProvider(context: vscode.ExtensionContext, model: string): Promise<LlmProvider> {
   if (model.startsWith('mock-')) {
     return 'mock'
@@ -160,11 +192,17 @@ async function inferAutoProvider(context: vscode.ExtensionContext, model: string
   })
 }
 
+/**
+ * 构建 OpenAI 请求选项
+ * @param context VS Code 扩展上下文
+ * @returns OpenAI 请求选项
+ * @throws LlmProviderError 当 API Key 未配置时
+ */
 async function buildOpenAiRequestOptions(context: vscode.ExtensionContext): Promise<{ apiKey: string; baseUrl?: string }> {
   const baseUrl = getOpenAiBaseUrlFromConfig()
   const apiKey = await getOpenAIApiKey(context)
   if (!apiKey) {
-    // 未配置密钥时明确失败，不做静默回退，避免掩盖环境问题。
+    // 未配置密钥时明确失败，不做静默回退，避免掩盖环境问题
     throw new LlmProviderError({
       code: 'auth_failed',
       provider: 'openai',
@@ -179,11 +217,23 @@ async function buildOpenAiRequestOptions(context: vscode.ExtensionContext): Prom
   }
 }
 
+/**
+ * 从配置中获取 OpenAI 基础 URL
+ * @returns OpenAI 基础 URL
+ */
 function getOpenAiBaseUrlFromConfig(): string {
   const configured = vscode.workspace.getConfiguration('agent').get<string>('openai.baseUrl', '')
   return typeof configured === 'string' ? configured.trim() : ''
 }
 
+/**
+ * 组合带上下文的提示词
+ * @param userText 用户输入文本
+ * @param editorSnippets 编辑器上下文片段
+ * @param attachmentSnippets 附件上下文片段
+ * @param skippedAttachments 跳过的附件
+ * @returns 组合后的提示词
+ */
 function composePromptWithContext(
   userText: string,
   editorSnippets: ContextSnippet[],
@@ -229,6 +279,14 @@ function composePromptWithContext(
   return sections.join('\n\n')
 }
 
+/**
+ * 为当前轮次构建 LLM 消息
+ * @param sessionStore 会话存储
+ * @param sessionId 会话 ID
+ * @param currentUserText 当前用户文本
+ * @param currentPromptWithContext 当前带上下文的提示词
+ * @returns LLM 消息数组
+ */
 async function buildLlmMessagesForCurrentTurn(
   sessionStore: SessionStore,
   sessionId: string,
@@ -249,7 +307,7 @@ async function buildLlmMessagesForCurrentTurn(
         content: message.content,
       }))
 
-    // appendUserMessage 已在本轮开始时写入 currentUserText，这里移除末尾那条原文防重复。
+    // appendUserMessage 已在本轮开始时写入 currentUserText，这里移除末尾那条原文防重复
     const lastHistoryMessage = historyMessages[historyMessages.length - 1]
     if (lastHistoryMessage?.role === 'user' && lastHistoryMessage.content === currentUserText) {
       historyMessages.pop()
@@ -263,7 +321,7 @@ async function buildLlmMessagesForCurrentTurn(
       },
     ]
   } catch {
-    // 历史读取异常时降级为单轮模式，保证主链路可用。
+    // 历史读取异常时降级为单轮模式，保证主链路可用
     return [{ role: 'user', content: currentPromptWithContext }]
   }
 }
