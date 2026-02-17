@@ -128,6 +128,11 @@ body {
 }
 
 @theme inline {
+  /* Compact breakpoint scale for VS Code sidebar/webview layouts. */
+  --breakpoint-sm: 20rem; /* 320px */
+  --breakpoint-md: 24rem; /* 384px */
+  --breakpoint-lg: 28rem; /* 448px */
+  --breakpoint-xl: 36rem; /* 576px */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

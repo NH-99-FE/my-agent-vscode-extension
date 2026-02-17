@@ -1,8 +1,9 @@
-import { ChevronDown, Plus } from 'lucide-react'
+import { Bot, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react'
 import { IconTooltip } from '@/components/common/IconTooltip'
 import { ArrowUp } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useLayoutEffect, useRef, useState } from 'react'
+import { OptionSelect } from '@/components/common/OptionSelect'
 
 export const Composer = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -24,6 +25,19 @@ export const Composer = () => {
     resizeTextarea()
   }, [])
 
+  const modelOptions = [
+    { value: 'gpt-5.3-codex', label: 'GPT-5.3-Codex', icon: Bot },
+    { value: 'gpt-4-codex', label: 'GPT-4-Codex', icon: Bot },
+    { value: 'gpt-3.5-codex', label: 'GPT-3.5-Codex', icon: Bot },
+  ]
+
+  const strengthOptions = [
+    { value: 'low', label: '弱', icon: Leaf },
+    { value: 'medium', label: '中', icon: BrainIcon },
+    { value: 'high', label: '强', icon: BrainCircuit },
+    { value: 'ultra', label: '超高', icon: BrainCog },
+  ]
+
   return (
     <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground shadow-xs">
       <Textarea
@@ -37,18 +51,19 @@ export const Composer = () => {
         <IconTooltip tipText="添加文件等">
           <Plus className="h-5 w-5" />
         </IconTooltip>
-        <IconTooltip tipText="选择模型">
-          <div className="flex items-center gap-0.5 px-1">
-            <span className="text-sm">GPT-5.3-Codex</span>
-            <ChevronDown className="h-4 w-4" />
-          </div>
-        </IconTooltip>
-        <IconTooltip tipText="选择推理强度等级">
-          <div className="flex items-center gap-0.5 px-1">
-            <span className="text-sm">中</span>
-            <ChevronDown className="h-4 w-4" />
-          </div>
-        </IconTooltip>
+        <OptionSelect
+          title="选择模型"
+          hoverTip="选择模型"
+          options={modelOptions}
+          showItemIcon={false}
+          onChange={value => console.log('Selected model:', value)}
+        />
+        <OptionSelect
+          title="选择推理功能"
+          hoverTip="选择推理强度等级"
+          options={strengthOptions}
+          onChange={value => console.log('Selected strength:', value)}
+        />
       </div>
       <div className="absolute right-2 bottom-2">
         <IconTooltip tipText="发送消息" hasBackground={true}>
