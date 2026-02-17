@@ -3,7 +3,12 @@
   "extends": "./tsconfig.node.json",
   "compilerOptions": {
     "noEmit": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "@agent/types": ["./packages/types/src/index.ts"],
+      "@agent/types/*": ["./packages/types/src/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["dist", "node_modules", "webview-ui", "packages"]

@@ -1,12 +1,7 @@
 import * as vscode from 'vscode'
 import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '@agent/types'
 import { buildContextFromActiveEditor } from '../context/contextBuilder'
-import {
-  createLlmClient,
-  LlmAbortError,
-  LlmCancellationController,
-  LlmTimeoutError,
-} from '../llm/client'
+import { createLlmClient, LlmAbortError, LlmCancellationController, LlmTimeoutError } from '../llm/client'
 import { SessionStore } from '../storage/sessionStore'
 
 const llmClient = createLlmClient()
@@ -22,10 +17,7 @@ interface InFlightRequest {
  * 2. 根据 type 路由到对应处理逻辑
  * 3. 兜底返回统一错误消息
  */
-export function registerWebviewMessageHandler(
-  panel: vscode.WebviewPanel,
-  context: vscode.ExtensionContext,
-): vscode.Disposable {
+export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): vscode.Disposable {
   const sessionStore = new SessionStore(context)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求。
   const inFlightBySession = new Map<string, InFlightRequest>()
@@ -55,6 +47,9 @@ export function registerWebviewMessageHandler(
       case 'chat.cancel':
         await handleChatCancel(panel, parsedMessage, inFlightBySession)
         break
+      case 'context.files.pick':
+        await handleContextFilesPick(panel, parsedMessage)
+        break
     }
   })
 }
@@ -69,7 +64,7 @@ async function handleChatSend(
   panel: vscode.WebviewPanel,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.send' }>,
   sessionStore: SessionStore,
-  inFlightBySession: Map<string, InFlightRequest>,
+  inFlightBySession: Map<string, InFlightRequest>
 ): Promise<void> {
   // 用户连续发送同一会话请求时，先取消旧流，防止并发回包乱序。
   const previous = inFlightBySession.get(message.payload.sessionId)
@@ -185,7 +180,7 @@ async function handleChatSend(
 async function handleChatCancel(
   panel: vscode.WebviewPanel,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.cancel' }>,
-  inFlightBySession: Map<string, InFlightRequest>,
+  inFlightBySession: Map<string, InFlightRequest>
 ): Promise<void> {
   const inFlight = inFlightBySession.get(message.payload.sessionId)
   if (!inFlight) {
@@ -197,24 +192,49 @@ async function handleChatCancel(
   inFlight.controller.cancel('cancelled by user')
 }
 
-function composePromptWithContext(
-  userText: string,
-  snippets: Array<{ source: string; filePath: string; content: string }>,
-): string {
+async function handleContextFilesPick(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'context.files.pick' }>
+): Promise<void> {
+  const maxCount = Math.max(0, Math.floor(message.payload.maxCount))
+  if (maxCount === 0) {
+    await postTypedMessage(panel, {
+      type: 'context.files.picked',
+      ...(message.requestId ? { requestId: message.requestId } : {}),
+      payload: { files: [] },
+    })
+    return
+  }
+
+  const pickedUris = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectMany: true,
+    canSelectFolders: false,
+    openLabel: '添加上下文文件',
+  })
+
+  const files = (pickedUris ?? []).slice(0, maxCount).map(uri => ({
+    path: uri.fsPath,
+    name: uri.path.split('/').pop() ?? uri.fsPath,
+  }))
+
+  await postTypedMessage(panel, {
+    type: 'context.files.picked',
+    ...(message.requestId ? { requestId: message.requestId } : {}),
+    payload: { files },
+  })
+}
+
+function composePromptWithContext(userText: string, snippets: Array<{ source: string; filePath: string; content: string }>): string {
   if (snippets.length === 0) {
     return userText
   }
 
   const contextBlock = snippets
     .map((snippet, index) => {
-      return [
-        `### Context ${index + 1}`,
-        `source: ${snippet.source}`,
-        `file: ${snippet.filePath}`,
-        '```',
-        snippet.content,
-        '```',
-      ].join('\n')
+      return [`### Context ${index + 1}`, `source: ${snippet.source}`, `file: ${snippet.filePath}`, '```', snippet.content, '```'].join(
+        '\n'
+      )
     })
     .join('\n\n')
 
@@ -224,11 +244,7 @@ function composePromptWithContext(
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
-async function postSystemError(
-  panel: vscode.WebviewPanel,
-  message: string,
-  requestId?: string,
-): Promise<void> {
+async function postSystemError(panel: vscode.WebviewPanel, message: string, requestId?: string): Promise<void> {
   await postTypedMessage(panel, {
     type: 'system.error',
     ...(requestId ? { requestId } : {}),
@@ -239,10 +255,7 @@ async function postSystemError(
 /**
  * 统一发送扩展到前端消息，保持发送侧类型收敛。
  */
-async function postTypedMessage(
-  panel: vscode.WebviewPanel,
-  message: ExtensionToWebviewMessage,
-): Promise<void> {
+async function postTypedMessage(panel: vscode.WebviewPanel, message: ExtensionToWebviewMessage): Promise<void> {
   await panel.webview.postMessage(message)
 }
 
@@ -312,14 +325,30 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       }
       return chatCancelMessage
     }
+    case 'context.files.pick': {
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return undefined
+      }
+      const payload = maybeMessage.payload as Record<string, unknown>
+      if (typeof payload.maxCount !== 'number' || !Number.isFinite(payload.maxCount)) {
+        return undefined
+      }
+
+      const contextFilesPickMessage: WebviewToExtensionMessage = {
+        type: 'context.files.pick',
+        ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
+        payload: {
+          maxCount: payload.maxCount,
+        },
+      }
+      return contextFilesPickMessage
+    }
     default:
       return undefined
   }
 }
 
-function asOptionalObjectWithOptionalNumberTimestamp(
-  value: unknown,
-): { timestamp?: number } | undefined {
+function asOptionalObjectWithOptionalNumberTimestamp(value: unknown): { timestamp?: number } | undefined {
   if (value === undefined) {
     return undefined
   }

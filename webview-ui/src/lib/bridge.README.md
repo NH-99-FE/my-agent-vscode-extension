@@ -20,8 +20,8 @@
 
 当前常用类型：
 
-- 前端发：`ping`、`chat.send`、`chat.cancel`
-- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`
+- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`
+- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`
 
 ## 3. 基本用法
 

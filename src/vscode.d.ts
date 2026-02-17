@@ -15,6 +15,7 @@ declare module 'vscode' {
   // 资源定位对象（文件、webview 资源等都通过 Uri 表示）。
   export class Uri {
     readonly fsPath: string
+    readonly path: string
     toString(): string
     static joinPath(base: Uri, ...pathSegments: string[]): Uri
   }
@@ -55,6 +56,13 @@ declare module 'vscode' {
     readonly enableScripts?: boolean
     readonly retainContextWhenHidden?: boolean
     readonly localResourceRoots?: readonly Uri[]
+  }
+
+  export interface OpenDialogOptions {
+    canSelectFiles?: boolean
+    canSelectFolders?: boolean
+    canSelectMany?: boolean
+    openLabel?: string
   }
 
   // Webview 运行时对象：设置 HTML、收发消息、转换资源路径。
@@ -103,6 +111,7 @@ declare module 'vscode' {
 
   export namespace window {
     function showInformationMessage(message: string): Promise<string | undefined>
+    function showOpenDialog(options?: OpenDialogOptions): Thenable<readonly Uri[] | undefined>
     const activeTextEditor: TextEditor | undefined
     // 创建 WebviewPanel。
     function createWebviewPanel(viewType: string, title: string, showOptions: ViewColumn, options?: WebviewOptions): WebviewPanel

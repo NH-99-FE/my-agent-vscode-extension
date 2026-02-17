@@ -47,9 +47,22 @@ export interface ChatCancelMessage extends MessageMeta {
 }
 
 /**
+ * 前端 -> 扩展：请求打开文件选择器以添加上下文文件。
+ */
+export interface ContextFilesPickMessage extends MessageMeta {
+  type: 'context.files.pick'
+  payload: {
+    /**
+     * 本次最多允许选择的文件数。
+     */
+    maxCount: number
+  }
+}
+
+/**
  * Webview 发给扩展的所有入站消息联合类型。
  */
-export type WebviewToExtensionMessage = PingMessage | ChatSendMessage | ChatCancelMessage
+export type WebviewToExtensionMessage = PingMessage | ChatSendMessage | ChatCancelMessage | ContextFilesPickMessage
 
 /**
  * 扩展 -> 前端：ping 的响应消息。
@@ -124,6 +137,25 @@ export interface ChatErrorMessage extends MessageMeta {
 }
 
 /**
+ * 扩展 -> 前端：文件选择结果回包。
+ */
+export interface ContextFilesPickedMessage extends MessageMeta {
+  type: 'context.files.picked'
+  payload: {
+    files: Array<{
+      /**
+       * 文件绝对路径（fsPath）。
+       */
+      path: string
+      /**
+       * 文件名（不含目录）。
+       */
+      name: string
+    }>
+  }
+}
+
+/**
  * 扩展发给 Webview 的所有出站消息联合类型。
  */
 export type ExtensionToWebviewMessage =
@@ -133,3 +165,4 @@ export type ExtensionToWebviewMessage =
   | ChatDeltaMessage
   | ChatDoneMessage
   | ChatErrorMessage
+  | ContextFilesPickedMessage

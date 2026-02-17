@@ -1,13 +1,7 @@
 /**
  * 统一导出共享上下文类型。
  */
-export type {
-  BuiltContext,
-  ChatMessage,
-  ChatSession,
-  ContextSnippet,
-  ContextSource,
-} from './context'
+export type { BuiltContext, ChatMessage, ChatSession, ContextSnippet, ContextSource } from './context'
 
 /**
  * 统一导出 Webview <-> Extension 协议消息类型。
@@ -18,6 +12,8 @@ export type {
   ChatDeltaMessage,
   ChatErrorMessage,
   ChatSendMessage,
+  ContextFilesPickedMessage,
+  ContextFilesPickMessage,
   ExtensionToWebviewMessage,
   MessageMeta,
   PingMessage,
