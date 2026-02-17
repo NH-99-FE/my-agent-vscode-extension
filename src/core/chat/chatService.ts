@@ -6,7 +6,7 @@ import type { AttachmentSnippet, SkippedAttachment } from '../context/attachment
 import { buildAttachmentContext } from '../context/attachmentContext'
 import { buildContextFromActiveEditor } from '../context/contextBuilder'
 import { createUnknownProviderError, formatLlmProviderError } from '../llm/errors'
-import { getOpenAIApiKey } from '../storage/secrets'
+import { getOpenAIApiKey, hasOpenAIApiKey } from '../storage/secrets'
 import { SessionStore } from '../storage/sessionStore'
 
 export interface ChatServiceRequest {
@@ -47,13 +47,14 @@ export class ChatService {
 
     try {
       // provider 选择属于业务策略，固定收敛在 service，避免泄漏到 handler。
-      provider = await resolveProviderForModel(request.model)
+      provider = await resolveProviderForModel(this.context, request.model)
+      const openAiRequestOptions = provider === 'openai' ? await buildOpenAiRequestOptions(this.context) : undefined
       const stream = this.llmClient.streamChat({
         provider,
         model: request.model,
         reasoningLevel: request.reasoningLevel,
         sessionId: request.sessionId,
-        ...(provider === 'openai' ? { apiKey: await requireOpenAiApiKey(this.context) } : {}),
+        ...(openAiRequestOptions ?? {}),
         messages: [{ role: 'user', content: promptWithContext }],
         timeoutMs: this.options.timeoutMs ?? 30_000,
         maxRetries: this.options.maxRetries ?? 1,
@@ -98,13 +99,27 @@ export class ChatService {
   }
 }
 
-async function resolveProviderForModel(model: string): Promise<LlmProvider> {
-  const configuredProvider = getConfiguredProvider()
-  if (configuredProvider === 'auto') {
-    // auto 模式下按模型前缀映射，保证前端无 provider 字段也可路由。
-    return inferProviderByModel(model)
+async function resolveProviderForModel(context: vscode.ExtensionContext, model: string): Promise<LlmProvider> {
+  const normalizedModel = model.trim()
+  if (!normalizedModel) {
+    throw new LlmProviderError({
+      code: 'unknown_model',
+      provider: 'auto',
+      retryable: false,
+      message: 'Model name is required.',
+    })
   }
-  return configuredProvider
+
+  const configuredProvider = getConfiguredProvider()
+  if (configuredProvider === 'openai') {
+    // openai 模式允许任意 OpenAI-compatible 模型名透传。
+    return 'openai'
+  }
+  if (configuredProvider === 'mock') {
+    return inferMockProvider(normalizedModel)
+  }
+  // auto 规则：优先保留 mock-* 测试通道；否则在存在 OpenAI key 时走 openai 兼容链路。
+  return inferAutoProvider(context, normalizedModel)
 }
 
 function getConfiguredProvider(): LlmProvider | 'auto' {
@@ -115,33 +130,59 @@ function getConfiguredProvider(): LlmProvider | 'auto' {
   throw createUnknownProviderError(configured)
 }
 
-function inferProviderByModel(model: string): LlmProvider {
+function inferMockProvider(model: string): LlmProvider {
   if (model.startsWith('mock-')) {
     return 'mock'
   }
-  if (model.startsWith('gpt-')) {
+  throw new LlmProviderError({
+    code: 'unknown_model',
+    provider: 'mock',
+    retryable: false,
+    message: `Model "${model}" is not supported in mock mode.`,
+  })
+}
+
+async function inferAutoProvider(context: vscode.ExtensionContext, model: string): Promise<LlmProvider> {
+  if (model.startsWith('mock-')) {
+    return 'mock'
+  }
+
+  if (await hasOpenAIApiKey(context)) {
     return 'openai'
   }
+
   throw new LlmProviderError({
     code: 'unknown_model',
     provider: 'auto',
     retryable: false,
-    message: `Cannot resolve provider for model "${model}".`,
+    message: `Cannot resolve provider for model "${model}" in auto mode. Configure OpenAI API key or switch provider.default.`,
   })
 }
 
-async function requireOpenAiApiKey(context: vscode.ExtensionContext): Promise<string> {
+async function buildOpenAiRequestOptions(
+  context: vscode.ExtensionContext
+): Promise<{ apiKey: string; baseUrl?: string }> {
+  const baseUrl = getOpenAiBaseUrlFromConfig()
   const apiKey = await getOpenAIApiKey(context)
-  if (apiKey) {
-    return apiKey
+  if (!apiKey) {
+    // 未配置密钥时明确失败，不做静默回退，避免掩盖环境问题。
+    throw new LlmProviderError({
+      code: 'auth_failed',
+      provider: 'openai',
+      retryable: false,
+      message: 'OpenAI API key is not configured.',
+    })
   }
-  // 未配置密钥时明确失败，不做静默回退，避免掩盖环境问题。
-  throw new LlmProviderError({
-    code: 'auth_failed',
-    provider: 'openai',
-    retryable: false,
-    message: 'OpenAI API key is not configured.',
-  })
+
+  return {
+    apiKey,
+    ...(baseUrl ? { baseUrl } : {}),
+  }
+}
+
+function getOpenAiBaseUrlFromConfig(): string {
+  const configured = vscode.workspace.getConfiguration('agent').get<string>('openai.baseUrl', '')
+  return typeof configured === 'string' ? configured.trim() : ''
 }
 
 function composePromptWithContext(

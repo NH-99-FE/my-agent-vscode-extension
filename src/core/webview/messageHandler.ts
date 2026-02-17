@@ -1,7 +1,9 @@
 import * as vscode from 'vscode'
-import type { ChatAttachment, ExtensionToWebviewMessage, ReasoningLevel, WebviewToExtensionMessage } from '@agent/types'
+import type { ChatAttachment, ExtensionToWebviewMessage, ProviderDefault, ReasoningLevel, WebviewToExtensionMessage } from '@agent/types'
 import { ChatService } from '../chat/chatService'
+import { SessionService } from '../chat/sessionService'
 import { createLlmClient, LlmAbortError, LlmCancellationController, LlmTimeoutError } from '../llm/client'
+import { SettingsService } from '../settings/settingsService'
 import { SessionStore } from '../storage/sessionStore'
 
 const llmClient = createLlmClient()
@@ -20,6 +22,8 @@ interface InFlightRequest {
 export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): vscode.Disposable {
   const sessionStore = new SessionStore(context)
   const chatService = new ChatService(llmClient, sessionStore, context)
+  const sessionService = new SessionService(sessionStore)
+  const settingsService = new SettingsService(context)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求。
   const inFlightBySession = new Map<string, InFlightRequest>()
 
@@ -31,26 +35,45 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
       return
     }
 
-    switch (parsedMessage.type) {
-      case 'ping':
-        // 最小联通验证：收到 ping 即回 pong，带 requestId 便于前端做请求匹配。
-        await postTypedMessage(panel, {
-          type: 'pong',
-          ...(parsedMessage.requestId !== undefined ? { requestId: parsedMessage.requestId } : {}),
-          payload: {
-            timestamp: Date.now(),
-          },
-        })
-        break
-      case 'chat.send':
-        await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
-        break
-      case 'chat.cancel':
-        await handleChatCancel(panel, parsedMessage, inFlightBySession)
-        break
-      case 'context.files.pick':
-        await handleContextFilesPick(panel, parsedMessage)
-        break
+    try {
+      switch (parsedMessage.type) {
+        case 'ping':
+          // 最小联通验证：收到 ping 即回 pong，带 requestId 便于前端做请求匹配。
+          await postTypedMessage(panel, {
+            type: 'pong',
+            ...(parsedMessage.requestId !== undefined ? { requestId: parsedMessage.requestId } : {}),
+            payload: {
+              timestamp: Date.now(),
+            },
+          })
+          break
+        case 'chat.send':
+          await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
+          break
+        case 'chat.cancel':
+          await handleChatCancel(panel, parsedMessage, inFlightBySession)
+          break
+        case 'context.files.pick':
+          await handleContextFilesPick(panel, parsedMessage)
+          break
+        case 'settings.get':
+          await handleSettingsGet(panel, parsedMessage, settingsService)
+          break
+        case 'settings.update':
+          await handleSettingsUpdate(panel, parsedMessage, settingsService)
+          break
+        case 'settings.apiKey.set':
+          await handleSettingsApiKeySet(panel, parsedMessage, settingsService)
+          break
+        case 'settings.apiKey.delete':
+          await handleSettingsApiKeyDelete(panel, parsedMessage, settingsService)
+          break
+        case 'chat.session.create':
+          await handleChatSessionCreate(panel, parsedMessage, sessionService)
+          break
+      }
+    } catch (error) {
+      await postSystemError(panel, toErrorMessage(error), parsedMessage.requestId)
     }
   })
 }
@@ -206,6 +229,73 @@ async function handleContextFilesPick(
   })
 }
 
+async function handleSettingsGet(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'settings.get' }>,
+  settingsService: SettingsService
+): Promise<void> {
+  const state = await settingsService.getState()
+  await postTypedMessage(panel, {
+    type: 'settings.state',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: state,
+  })
+}
+
+async function handleSettingsUpdate(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'settings.update' }>,
+  settingsService: SettingsService
+): Promise<void> {
+  const state = await settingsService.updateSettings(message.payload)
+  await postTypedMessage(panel, {
+    type: 'settings.state',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: state,
+  })
+}
+
+async function handleSettingsApiKeySet(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.set' }>,
+  settingsService: SettingsService
+): Promise<void> {
+  const state = await settingsService.setOpenAiApiKey(message.payload.apiKey)
+  await postTypedMessage(panel, {
+    type: 'settings.state',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: state,
+  })
+}
+
+async function handleSettingsApiKeyDelete(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.delete' }>,
+  settingsService: SettingsService
+): Promise<void> {
+  const state = await settingsService.deleteOpenAiApiKey()
+  await postTypedMessage(panel, {
+    type: 'settings.state',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: state,
+  })
+}
+
+async function handleChatSessionCreate(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'chat.session.create' }>,
+  sessionService: SessionService
+): Promise<void> {
+  const created = await sessionService.createSession()
+  await postTypedMessage(panel, {
+    type: 'chat.session.created',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: {
+      sessionId: created.sessionId,
+    },
+  })
+}
+
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
@@ -320,6 +410,102 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       }
       return contextFilesPickMessage
     }
+    case 'settings.get': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+
+      const settingsGetMessage: WebviewToExtensionMessage = {
+        type: 'settings.get',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return settingsGetMessage
+    }
+    case 'settings.update': {
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return undefined
+      }
+
+      const payload = maybeMessage.payload as Record<string, unknown>
+      const providerDefault = asProviderDefault(payload.providerDefault)
+      const openaiBaseUrl = asString(payload.openaiBaseUrl)
+      const openaiDefaultModel = asString(payload.openaiDefaultModel)
+      const openaiModels = asStringArray(payload.openaiModels)
+      if (payload.providerDefault !== undefined && providerDefault === undefined) {
+        return undefined
+      }
+      if (payload.openaiBaseUrl !== undefined && openaiBaseUrl === undefined) {
+        return undefined
+      }
+      if (payload.openaiDefaultModel !== undefined && openaiDefaultModel === undefined) {
+        return undefined
+      }
+      if (payload.openaiModels !== undefined && openaiModels === undefined) {
+        return undefined
+      }
+      if (
+        providerDefault === undefined &&
+        openaiBaseUrl === undefined &&
+        openaiDefaultModel === undefined &&
+        openaiModels === undefined
+      ) {
+        return undefined
+      }
+
+      const settingsUpdateMessage: WebviewToExtensionMessage = {
+        type: 'settings.update',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+        payload: {
+          ...(providerDefault !== undefined ? { providerDefault } : {}),
+          ...(openaiBaseUrl !== undefined ? { openaiBaseUrl } : {}),
+          ...(openaiDefaultModel !== undefined ? { openaiDefaultModel } : {}),
+          ...(openaiModels !== undefined ? { openaiModels } : {}),
+        },
+      }
+      return settingsUpdateMessage
+    }
+    case 'settings.apiKey.set': {
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return undefined
+      }
+
+      const payload = maybeMessage.payload as Record<string, unknown>
+      const apiKey = asNonEmptyString(payload.apiKey)
+      if (!apiKey) {
+        return undefined
+      }
+
+      const settingsApiKeySetMessage: WebviewToExtensionMessage = {
+        type: 'settings.apiKey.set',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+        payload: {
+          apiKey,
+        },
+      }
+      return settingsApiKeySetMessage
+    }
+    case 'settings.apiKey.delete': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+
+      const settingsApiKeyDeleteMessage: WebviewToExtensionMessage = {
+        type: 'settings.apiKey.delete',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return settingsApiKeyDeleteMessage
+    }
+    case 'chat.session.create': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+
+      const sessionCreateMessage: WebviewToExtensionMessage = {
+        type: 'chat.session.create',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return sessionCreateMessage
+    }
     default:
       return undefined
   }
@@ -390,4 +576,38 @@ function asAttachments(value: unknown): ChatAttachment[] | undefined {
   }
 
   return attachments
+}
+
+function asProviderDefault(value: unknown): ProviderDefault | undefined {
+  if (value === 'auto' || value === 'mock' || value === 'openai') {
+    return value
+  }
+  return undefined
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const normalized: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      return undefined
+    }
+    normalized.push(item)
+  }
+
+  return normalized
+}
+
+function isEmptyObject(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  return Object.keys(value as Record<string, unknown>).length === 0
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown message handler error.'
 }

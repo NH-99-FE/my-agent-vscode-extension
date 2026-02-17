@@ -295,6 +295,7 @@ export const useThreadComposerCanSend = () =>
   useThreadComposerStore(state => {
     const draft = selectCurrentDraft(state)
     const isSending = state.sendingBySession[state.sessionId] ?? false
+    const hasModel = draft.model.trim().length > 0
     const hasInput = draft.text.trim().length > 0 || draft.attachments.length > 0
-    return !isSending && hasInput
+    return !isSending && hasModel && hasInput
   })

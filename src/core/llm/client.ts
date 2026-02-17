@@ -39,6 +39,10 @@ export interface LlmStreamRequest {
    * Provider 访问密钥（按 provider 决定是否必填）。
    */
   apiKey?: string
+  /**
+   * OpenAI 兼容网关基础地址（可选）。
+   */
+  baseUrl?: string
   temperature?: number
   timeoutMs?: number
   maxRetries?: number

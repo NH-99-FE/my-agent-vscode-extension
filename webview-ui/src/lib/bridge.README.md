@@ -20,8 +20,10 @@
 
 当前常用类型：
 
-- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`
-- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`
+- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`、`chat.session.create`、`settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`
+- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`、`chat.session.created`、`settings.state`
+
+`settings.state` 在当前联调中除了基础字段外，可能包含模型配置字段（如 `defaultModel`、`models`），前端会做兼容消费。
 
 ## 3. 基本用法
 

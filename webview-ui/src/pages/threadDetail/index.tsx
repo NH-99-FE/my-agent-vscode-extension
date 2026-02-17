@@ -1,3 +1,7 @@
+import { useParams } from 'react-router'
+import { ThreadDetailView } from '@/features/thread/views/ThreadDetailView'
+
 export const ThreadDetailPage = () => {
-  return <div>ThreadDetailPage</div>
+  const { threadId } = useParams()
+  return <ThreadDetailView threadId={threadId} />
 }

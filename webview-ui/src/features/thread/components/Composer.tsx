@@ -3,10 +3,11 @@ import { Bot, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react
 import { IconTooltip } from '@/components/common/IconTooltip'
 import { ArrowUp } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { OptionSelect } from '@/components/common/OptionSelect'
 import { AddContextFiles, type ContextFileItem } from './AddContextFiles'
 import { bridge } from '@/lib/bridge'
+import { useNavigate } from 'react-router'
 import {
   buildChatSendMessage,
   buildContextFilesPickMessage,
@@ -14,6 +15,7 @@ import {
   getContextFilesRemaining,
   handleThreadExtensionMessage,
 } from '../services/threadMessageService'
+import { handleThreadSessionMessage } from '../services/threadSessionService'
 import {
   useThreadComposerActions,
   useThreadComposerAttachments,
@@ -24,13 +26,9 @@ import {
   useThreadComposerSessionId,
   useThreadComposerText,
 } from '../store/threadComposerStore'
+import { parseModelsText, useSettingsDefaultModel, useSettingsModelsText } from '../store/threadWorkspaceStore'
+import { useThreadSessionActions } from '../store/threadSessionStore'
 import { cn } from '@/lib/utils'
-
-const modelOptions = [
-  { value: 'gpt-5.3-codex', label: 'GPT-5.3-Codex', icon: Bot },
-  { value: 'gpt-4-codex', label: 'GPT-4-Codex', icon: Bot },
-  { value: 'gpt-3.5-codex', label: 'GPT-3.5-Codex', icon: Bot },
-]
 
 const strengthOptions: Array<{ value: ReasoningLevel; label: string; icon: typeof Leaf }> = [
   { value: 'low', label: '弱', icon: Leaf },
@@ -50,6 +48,7 @@ type ComposerProps = {
 }
 
 export const Composer = ({ routeThreadId }: ComposerProps) => {
+  const navigate = useNavigate()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isOverflowing, setIsOverflowing] = useState(false)
   const sessionId = useThreadComposerSessionId()
@@ -58,6 +57,16 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const reasoningLevel = useThreadComposerReasoningLevel()
   const attachments = useThreadComposerAttachments()
   const inlineNotice = useThreadComposerInlineNotice()
+  const settingsDefaultModel = useSettingsDefaultModel()
+  const settingsModelsText = useSettingsModelsText()
+  const settingsModelOptions = useMemo(() => {
+    const models = parseModelsText(settingsModelsText)
+    if (models.length > 0) {
+      return models
+    }
+    const fallback = settingsDefaultModel.trim()
+    return fallback ? [fallback] : []
+  }, [settingsDefaultModel, settingsModelsText])
   const canSend = useThreadComposerCanSend()
   const {
     initSession,
@@ -72,6 +81,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     setSending,
     setInlineNotice,
   } = useThreadComposerActions()
+  const { appendUserMessage, appendAssistantDelta, completeAssistantMessage, setAssistantError } = useThreadSessionActions()
 
   const contextFiles: ContextFileItem[] = attachments.map(file => ({
     id: file.path,
@@ -80,6 +90,18 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }))
   const remainingContextFiles = getContextFilesRemaining(attachments.length)
   const maxHeight = 200
+  const missingModelNotice =
+    !model.trim() && (text.trim().length > 0 || attachments.length > 0) ? '请先在设置中配置默认模型' : null
+  const activeInlineNotice = missingModelNotice ?? inlineNotice
+  const modelOptions = useMemo(
+    () =>
+      settingsModelOptions.map(modelId => ({
+        value: modelId,
+        label: modelId,
+        icon: Bot,
+      })),
+    [settingsModelOptions],
+  )
 
   const resizeTextarea = () => {
     const el = textareaRef.current
@@ -109,10 +131,39 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         setSending,
         setInlineNotice,
       })
+      handleThreadSessionMessage(message, {
+        appendAssistantDelta,
+        completeAssistantMessage,
+        setAssistantError,
+      })
     })
 
     return dispose
-  }, [addPickedFiles, clearAttachments, consumePendingContextPickSession, setInlineNotice, setSending])
+  }, [
+    addPickedFiles,
+    appendAssistantDelta,
+    clearAttachments,
+    completeAssistantMessage,
+    consumePendingContextPickSession,
+    setAssistantError,
+    setInlineNotice,
+    setSending,
+  ])
+
+  useEffect(() => {
+    if (settingsModelOptions.length === 0) {
+      if (model) {
+        setModel('')
+      }
+      return
+    }
+    if (!settingsModelOptions.includes(model)) {
+      const fallbackModel = settingsModelOptions[0]
+      if (fallbackModel) {
+        setModel(fallbackModel)
+      }
+    }
+  }, [model, sessionId, setModel, settingsModelOptions])
 
   const handlePickContextFiles = () => {
     // 附件已满时不再发 pick 请求，直接展示统一提示。
@@ -129,10 +180,14 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const handleSend = () => {
     // 兜底保护：UI 已禁用按钮，这里再做一次逻辑防守。
     if (!canSend) {
+      if (!model.trim()) {
+        setInlineNotice('请先在设置中配置默认模型')
+      }
       return
     }
     setInlineNotice(null)
     setSending(sessionId, true)
+    appendUserMessage(sessionId, text)
     bridge.send(
       buildChatSendMessage({
         sessionId,
@@ -142,6 +197,12 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         attachments,
       }),
     )
+    // 发送成功发起后立即清空输入框，避免旧草稿残留在输入区。
+    setText('')
+    // 在首页直接发送时，切换到该会话详情页，便于承接后续流式消息展示。
+    if (!routeThreadId && sessionId.trim()) {
+      navigate(`/${sessionId}`)
+    }
   }
 
   return (
@@ -159,7 +220,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         onInput={resizeTextarea}
         onChange={event => {
           setText(event.target.value)
-          if (inlineNotice) {
+          if (inlineNotice && !missingModelNotice) {
             setInlineNotice(null)
           }
         }}
@@ -179,7 +240,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         </IconTooltip>
         <OptionSelect
           title="选择模型"
-          hoverTip="选择模型"
+          hoverTip="选择模型（来自设置）"
           options={modelOptions}
           showItemIcon={false}
           value={model}
@@ -199,7 +260,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
           }}
         />
       </div>
-      {inlineNotice ? <p className="mt-1 px-1 text-xs text-destructive">{inlineNotice}</p> : null}
+      {activeInlineNotice ? <p className="mt-1 px-1 text-xs text-destructive">{activeInlineNotice}</p> : null}
       <div className="absolute right-2 bottom-2">
         <IconTooltip tipText="发送消息" hasBackground={true}>
           <button

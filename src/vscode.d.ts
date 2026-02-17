@@ -108,6 +108,7 @@ declare module 'vscode' {
   export interface WorkspaceConfiguration {
     get<T>(section: string): T | undefined
     get<T>(section: string, defaultValue: T): T
+    update(section: string, value: unknown, global?: boolean): Thenable<void>
   }
 
   export namespace commands {

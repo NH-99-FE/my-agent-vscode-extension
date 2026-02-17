@@ -60,12 +60,15 @@
 - 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
 - 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`。
+- 设置/会话协议层：已新增 `settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`、`chat.session.create` 入站消息，以及 `settings.state`、`chat.session.created` 出站消息。
 - 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。
 - LLM 流式层：已完成 provider 抽象（adapter + registry + 统一错误归一化），并接入 `mock/openai` 双通道，支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
 - 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
+- 设置服务：已新增 `SettingsService`，统一承接 provider/default 与 openai/baseUrl 配置读写，以及 OpenAI API Key 的 set/delete/has 状态回传。
 - 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略），并新增附件上下文读取与拼装（文本读取、截断、二进制识别、失败跳过）。
 - 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
+- 会话创建：已新增 `chat.session.create` 后端能力，可生成并返回新 `sessionId`，并更新 active session 语义。
 - 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
 - Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构；OpenAI 适配中 `reasoningLevel=ultra` 映射为 `high`，其余档位原样透传。
 - Provider 选择策略：后端已支持 `agent.provider.default`（`auto|mock|openai`）配置与模型映射（`mock-*` -> mock，`gpt-*` -> openai）。
@@ -75,6 +78,8 @@
 - 可完整打通 `chat.send -> 流式 delta -> done/error` 链路。
 - 可在 `chat.send` 中携带模型、推理强度、附件上下文并完成后端消费。
 - 可通过后端配置切换到 OpenAI 并保持协议输出不变（`chat.delta/chat.done/chat.error`）。
+- 可通过 `settings.get/settings.update/settings.apiKey.*` 完成设置面板所需后端状态读取与更新闭环。
+- 可通过 `chat.session.create` 返回新会话 ID 用于前端“新会话”入口。
 - 可对进行中的会话请求执行取消。
 - 可在后端保存并更新会话内容。
 
@@ -142,6 +147,10 @@
   - 处理 `context.files.pick`
   - 调用 `vscode.window.showOpenDialog`
   - 回包 `context.files.picked` 并透传同一 `requestId`（用于前端 pending map 稳定命中）
+- 已新增设置与会话创建通道处理：
+  - 处理 `settings.get/settings.update/settings.apiKey.set/settings.apiKey.delete`
+  - 回包 `settings.state`（`providerDefault/openaiBaseUrl/hasOpenAiApiKey`）
+  - 处理 `chat.session.create` 并回包 `chat.session.created`
 - LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。
 - 已完成 Provider 抽象层：
   - `ProviderAdapter` 接口与 `ProviderRegistry` 已落地（含 provider/model 校验）
@@ -151,6 +160,7 @@
   - `model/reasoningLevel` 已真实下传到 OpenAI 请求参数
   - requestId 在消息链路继续透传（按字段存在透传）
 - `ChatService` 已新增并接入主链路，handler 维持轻量路由职责。
+- `SettingsService` 与 `SessionService` 已新增，业务逻辑继续从 handler 下沉。
 - 会话持久化与密钥管理已有基础实现（`SessionStore`、`SecretStorage`）。
 
 #### 2) 代办

@@ -22,7 +22,42 @@
         "title": "Open Agent Chat",
         "category": "Agent"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Agent",
+      "properties": {
+        "agent.provider.default": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "mock",
+            "openai"
+          ],
+          "default": "auto",
+          "description": "Default provider selection mode for chat requests."
+        },
+        "agent.openai.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenAI-compatible base URL. Leave empty to use the official default endpoint."
+        },
+        "agent.openai.defaultModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Default OpenAI-compatible model name used by the settings panel."
+        },
+        "agent.openai.models": {
+          "type": "array",
+          "default": [
+            "gpt-4o-mini"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Recommended OpenAI-compatible model list for selection."
+        }
+      }
+    }
   },
   "scripts": {
     "dev:web": "pnpm --filter @agent/webview-ui dev",

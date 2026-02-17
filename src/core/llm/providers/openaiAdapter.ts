@@ -15,6 +15,16 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
   async *streamChat(request: LlmStreamRequest): AsyncGenerator<LlmStreamEvent> {
     assertNotCancelled(request.signal)
 
+    const model = request.model.trim()
+    if (!model) {
+      throw new LlmProviderError({
+        code: 'invalid_request',
+        provider: 'openai',
+        retryable: false,
+        message: 'OpenAI model is required.',
+      })
+    }
+
     if (!request.apiKey) {
       throw new LlmProviderError({
         code: 'auth_failed',
@@ -24,7 +34,8 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
       })
     }
 
-    const client = await createOpenAIClient(request.apiKey, request.timeoutMs)
+    const normalizedBaseUrl = normalizeBaseUrl(request.baseUrl)
+    const client = await createOpenAIClient(request.apiKey, request.timeoutMs, normalizedBaseUrl)
     const abortController = createAbortController()
     // 将扩展内部取消信号桥接到 OpenAI SDK 请求取消。
     const offCancel = request.signal?.onCancel(reason => {
@@ -39,7 +50,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
     try {
       const stream = await client.chat.completions.create(
         {
-          model: request.model,
+          model,
           stream: true,
           messages: toOpenAiMessages(request.messages),
           reasoning_effort: mapReasoningLevel(request.reasoningLevel),
@@ -70,7 +81,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
   }
 }
 
-async function createOpenAIClient(apiKey: string, timeoutMs?: number): Promise<OpenAIClientLike> {
+async function createOpenAIClient(apiKey: string, timeoutMs?: number, baseUrl?: string): Promise<OpenAIClientLike> {
   try {
     // 用动态导入避免在扩展编译阶段耦合 SDK 类型细节。
     const moduleName: string = 'openai'
@@ -84,6 +95,9 @@ async function createOpenAIClient(apiKey: string, timeoutMs?: number): Promise<O
     const options: Record<string, unknown> = { apiKey }
     if (typeof timeoutMs === 'number' && timeoutMs > 0) {
       options.timeout = timeoutMs
+    }
+    if (baseUrl) {
+      options.baseURL = baseUrl
     }
     return new OpenAI(options)
   } catch (error) {
@@ -163,6 +177,27 @@ function createAbortController(): { signal: unknown; abort: () => void } | undef
     return undefined
   }
   return new (ctor as new () => { signal: unknown; abort: () => void })()
+}
+
+function normalizeBaseUrl(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  const isHttpUrl = /^https?:\/\/[^\s]+$/i.test(trimmed)
+  if (!isHttpUrl) {
+    throw new LlmProviderError({
+      code: 'invalid_request',
+      provider: 'openai',
+      retryable: false,
+      message: 'OpenAI baseUrl is invalid.',
+    })
+  }
+  return trimmed
 }
 
 function normalizeOpenAiError(error: unknown, cancelReason?: string): Error {

@@ -22,7 +22,7 @@ export class DefaultProviderRegistry implements ProviderRegistry {
 }
 
 export function createProviderRegistry(params: { mockAdapter: ProviderAdapter; openAiAdapter: ProviderAdapter }): ProviderRegistry {
-  // 模型前缀规则集中管理，后续新增 provider 时只改这里。
+  // 模型规则集中管理：mock 保留 mock-* 通道，openai 接受任意非空兼容模型名。
   return new DefaultProviderRegistry({
     mock: {
       adapter: params.mockAdapter,
@@ -30,7 +30,7 @@ export function createProviderRegistry(params: { mockAdapter: ProviderAdapter; o
     },
     openai: {
       adapter: params.openAiAdapter,
-      supportsModel: model => model.startsWith('gpt-'),
+      supportsModel: model => model.trim().length > 0,
     },
   })
 }

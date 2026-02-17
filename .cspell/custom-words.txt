@@ -1,2 +1,4 @@
 Avenir
 Hoverable
+Zhipu
+Qwen

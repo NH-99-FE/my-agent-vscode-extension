@@ -69,6 +69,8 @@ const extensionToWebviewTypes: ExtensionToWebviewMessage['type'][] = [
   'chat.done',
   'chat.error',
   'context.files.picked',
+  'chat.session.created',
+  'settings.state',
 ]
 
 function isExtensionMessage(value: unknown): value is ExtensionToWebviewMessage {

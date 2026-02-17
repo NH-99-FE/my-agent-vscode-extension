@@ -20,6 +20,11 @@ export interface ChatAttachment {
 }
 
 /**
+ * 默认 Provider 选择策略。
+ */
+export type ProviderDefault = 'auto' | 'mock' | 'openai'
+
+/**
  * 前端 -> 扩展：连通性探活消息。
  */
 export interface PingMessage extends MessageMeta {
@@ -85,9 +90,62 @@ export interface ContextFilesPickMessage extends MessageMeta {
 }
 
 /**
+ * 前端 -> 扩展：读取当前设置状态。
+ */
+export interface SettingsGetMessage extends MessageMeta {
+  type: 'settings.get'
+}
+
+/**
+ * 前端 -> 扩展：更新设置项（部分字段更新）。
+ */
+export interface SettingsUpdateMessage extends MessageMeta {
+  type: 'settings.update'
+  payload: {
+    providerDefault?: ProviderDefault
+    openaiBaseUrl?: string
+    openaiDefaultModel?: string
+    openaiModels?: string[]
+  }
+}
+
+/**
+ * 前端 -> 扩展：写入 OpenAI API Key。
+ */
+export interface SettingsApiKeySetMessage extends MessageMeta {
+  type: 'settings.apiKey.set'
+  payload: {
+    apiKey: string
+  }
+}
+
+/**
+ * 前端 -> 扩展：删除 OpenAI API Key。
+ */
+export interface SettingsApiKeyDeleteMessage extends MessageMeta {
+  type: 'settings.apiKey.delete'
+}
+
+/**
+ * 前端 -> 扩展：创建新会话。
+ */
+export interface ChatSessionCreateMessage extends MessageMeta {
+  type: 'chat.session.create'
+}
+
+/**
  * Webview 发给扩展的所有入站消息联合类型。
  */
-export type WebviewToExtensionMessage = PingMessage | ChatSendMessage | ChatCancelMessage | ContextFilesPickMessage
+export type WebviewToExtensionMessage =
+  | PingMessage
+  | ChatSendMessage
+  | ChatCancelMessage
+  | ContextFilesPickMessage
+  | SettingsGetMessage
+  | SettingsUpdateMessage
+  | SettingsApiKeySetMessage
+  | SettingsApiKeyDeleteMessage
+  | ChatSessionCreateMessage
 
 /**
  * 扩展 -> 前端：ping 的响应消息。
@@ -181,6 +239,30 @@ export interface ContextFilesPickedMessage extends MessageMeta {
 }
 
 /**
+ * 扩展 -> 前端：设置状态快照。
+ */
+export interface SettingsStateMessage extends MessageMeta {
+  type: 'settings.state'
+  payload: {
+    providerDefault: ProviderDefault
+    openaiBaseUrl: string
+    hasOpenAiApiKey: boolean
+    openaiDefaultModel: string
+    openaiModels: string[]
+  }
+}
+
+/**
+ * 扩展 -> 前端：新会话创建完成。
+ */
+export interface ChatSessionCreatedMessage extends MessageMeta {
+  type: 'chat.session.created'
+  payload: {
+    sessionId: string
+  }
+}
+
+/**
  * 扩展发给 Webview 的所有出站消息联合类型。
  */
 export type ExtensionToWebviewMessage =
@@ -191,3 +273,5 @@ export type ExtensionToWebviewMessage =
   | ChatDoneMessage
   | ChatErrorMessage
   | ContextFilesPickedMessage
+  | SettingsStateMessage
+  | ChatSessionCreatedMessage

@@ -24,6 +24,22 @@ export class SessionStore {
     return this.context.workspaceState.get<string>(ACTIVE_SESSION_ID_KEY)
   }
 
+  async createSession(sessionId: string, titleSeed = ''): Promise<ChatSession> {
+    const now = Date.now()
+    const sessions = await this.getSessions()
+    const existing = sessions.find(item => item.id === sessionId)
+    if (existing) {
+      await this.setActiveSessionId(sessionId)
+      return existing
+    }
+
+    const created = createEmptySession(sessionId, titleSeed, now)
+    const nextSessions = [created, ...sessions]
+    await this.saveSessions(nextSessions)
+    await this.setActiveSessionId(sessionId)
+    return created
+  }
+
   async appendUserMessage(sessionId: string, content: string): Promise<ChatSession> {
     const now = Date.now()
     const sessions = await this.getSessions()
