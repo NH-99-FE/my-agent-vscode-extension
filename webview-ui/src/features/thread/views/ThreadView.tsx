@@ -1,5 +1,10 @@
 import bgLogo from '@/components/icons/bg-logo.svg'
 import { TaskList } from '../components/TasksList'
+import { useOutletContext } from 'react-router'
+
+type ThreadOutletContext = {
+  openHistoryCard: () => void
+}
 
 const tasks = [
   {
@@ -20,12 +25,14 @@ const tasks = [
 ]
 
 export const ThreadView = () => {
+  const { openHistoryCard } = useOutletContext<ThreadOutletContext>()
+
   return (
     <div className="relative h-full px-1">
       <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
         <img src={bgLogo} alt="背景logo" className="size-10" />
       </div>
-      <TaskList tasks={tasks} />
+      <TaskList tasks={tasks} onViewAllClick={openHistoryCard} />
     </div>
   )
 }

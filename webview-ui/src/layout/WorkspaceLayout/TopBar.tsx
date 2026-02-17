@@ -1,7 +1,14 @@
 import { IconTooltip } from '@/components/common/IconTooltip'
 import { History, Settings, Pencil, ArrowLeft } from 'lucide-react'
 
-export const TopBar = ({ mode }: { mode: 'thread' | 'detail' }) => {
+type TopBarProps = {
+  /** 当前页面模式：任务列表或详情页。 */
+  mode: 'thread' | 'detail'
+  /** 点击历史图标时触发（由布局层决定打开/关闭卡片）。 */
+  onHistoryClick?: () => void
+}
+
+export const TopBar = ({ mode, onHistoryClick }: TopBarProps) => {
   return (
     <div className="flex h-8 w-full items-center justify-between gap-4 overflow-hidden px-2.5">
       {mode === 'thread' ? (
@@ -18,7 +25,7 @@ export const TopBar = ({ mode }: { mode: 'thread' | 'detail' }) => {
       )}
       <div className="ml-auto flex items-center gap-2">
         <IconTooltip tipText="任务历史记录">
-          <History className="h-4 w-4" />
+          <History className="h-4 w-4 cursor-pointer" onClick={onHistoryClick} />
         </IconTooltip>
         <IconTooltip tipText="任务设置">
           <Settings className="h-4 w-4" />

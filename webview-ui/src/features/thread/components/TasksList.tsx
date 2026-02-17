@@ -9,9 +9,11 @@ type TaskItem = {
 }
 type TaskListProps = {
   tasks: TaskItem[]
+  /** 点击“查看全部”回调，由父组件决定展示历史搜索卡片。 */
+  onViewAllClick?: () => void
 }
 
-export const TaskList = ({ tasks }: TaskListProps) => {
+export const TaskList = ({ tasks, onViewAllClick }: TaskListProps) => {
   // 当前鼠标悬停的任务 id：用于切换右侧显示（time <-> 删除入口）。
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   // 当前处于“确认删除”态的任务 id：保证同一时刻只确认一个任务。
@@ -53,7 +55,10 @@ export const TaskList = ({ tasks }: TaskListProps) => {
         </div>
       ))}
       {/* 底部查看全部 */}
-      <span className="mt-1 cursor-pointer px-1.5 text-sm text-accent-foreground/70 transition-colors duration-200 hover:text-accent-foreground">
+      <span
+        onClick={onViewAllClick}
+        className="mt-1 cursor-pointer px-1.5 text-sm text-accent-foreground/70 transition-colors duration-200 hover:text-accent-foreground"
+      >
         查看全部{'（50个）'}
       </span>
     </div>

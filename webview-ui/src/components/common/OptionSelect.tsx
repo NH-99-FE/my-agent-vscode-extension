@@ -3,11 +3,26 @@ import type { LucideIcon } from 'lucide-react'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-type OptionSelect = {
+type OptionSelectItem = {
   value: string
   label: string
   icon: LucideIcon
   disabled?: boolean
+}
+
+type OptionSelectProps = {
+  /** 下拉可选项列表。 */
+  options: OptionSelectItem[]
+  /** 下拉面板标题。 */
+  title: string
+  /** 触发器 hover 提示文案。 */
+  hoverTip: string
+  /** 是否在下拉项内显示图标。 */
+  showItemIcon?: boolean
+  /** 默认选中项。 */
+  defaultValue?: string
+  /** 选中值变化回调。 */
+  onChange?: (value: string) => void
 }
 
 export function OptionSelect({
@@ -17,14 +32,7 @@ export function OptionSelect({
   showItemIcon = true,
   defaultValue,
   onChange,
-}: {
-  options: OptionSelect[]
-  title: string
-  hoverTip: string
-  showItemIcon?: boolean
-  defaultValue?: string
-  onChange?: (value: string) => void
-}) {
+}: OptionSelectProps) {
   const initial = defaultValue ?? options[0]?.value ?? ''
   const [value, setValue] = React.useState(initial)
   const [selectOpen, setSelectOpen] = React.useState(false)
@@ -37,12 +45,14 @@ export function OptionSelect({
       value={value}
       onOpenChange={open => {
         setSelectOpen(open)
+        // 下拉打开时立即关闭 tooltip，避免两层浮层重叠。
         if (open) {
           setTooltipOpen(false)
         }
       }}
       onValueChange={next => {
         setValue(next)
+        // 将新值抛给父组件（例如写入配置或触发请求）。
         onChange?.(next)
         setTooltipOpen(false)
       }}
