@@ -65,13 +65,14 @@
 - LLM 流式层：已完成 provider 抽象（adapter + registry + 统一错误归一化），并接入 `mock/openai` 双通道，支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
 - 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
-- 设置服务：已新增 `SettingsService`，统一承接 provider/default 与 openai/baseUrl 配置读写，以及 OpenAI API Key 的 set/delete/has 状态回传。
+- 设置服务：已新增 `SettingsService`，统一承接 provider/default、openai/baseUrl、openai/defaultModel、openai/models 配置读写，以及 OpenAI API Key 的 set/delete/has 状态回传。
 - 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略），并新增附件上下文读取与拼装（文本读取、截断、二进制识别、失败跳过）。
 - 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
 - 会话创建：已新增 `chat.session.create` 后端能力，可生成并返回新 `sessionId`，并更新 active session 语义。
 - 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
 - Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构；OpenAI 适配中 `reasoningLevel=ultra` 映射为 `high`，其余档位原样透传。
-- Provider 选择策略：后端已支持 `agent.provider.default`（`auto|mock|openai`）配置与模型映射（`mock-*` -> mock，`gpt-*` -> openai）。
+- Provider 选择策略：后端已支持 `agent.provider.default`（`auto|mock|openai`）配置与兼容模型路由。`openai` 模式下允许任意 OpenAI-compatible 非空模型名透传（如 `ZhipuAI/GLM-5`）；`auto` 模式下优先保留 `mock-*` 测试通道，其余在存在 OpenAI API Key 时走 openai。
+- OpenAI 兼容网关：已支持 `baseUrl + apiKey + model` 组合校验与透传；缺失/非法参数会返回结构化错误（归一化 code）。
 
 当前后端可用状态：
 
@@ -80,6 +81,7 @@
 - 可通过后端配置切换到 OpenAI 并保持协议输出不变（`chat.delta/chat.done/chat.error`）。
 - 可通过 `settings.get/settings.update/settings.apiKey.*` 完成设置面板所需后端状态读取与更新闭环。
 - 可通过 `chat.session.create` 返回新会话 ID 用于前端“新会话”入口。
+- 可在 `settings.state` 中读取 `openaiDefaultModel/openaiModels`，支撑前端模型配置面板。
 - 可对进行中的会话请求执行取消。
 - 可在后端保存并更新会话内容。
 
@@ -97,6 +99,11 @@
 - 基础 UX：无输入且无附件时禁用发送；发送中禁用重复发送；附件超上限提供 Composer 内联提示。
 - 历史记录搜索卡片：`HistorySearchCard` 已基于 shadcn `Command` 组件实现，支持搜索、列表展示、悬停删除、外部点击关闭。
 - 顶部栏与列表联动：支持通过“历史记录”图标与“查看全部”入口打开同一历史卡片，并在 thread/detail 页面复用。
+- 详情页最小可用：`/:threadId` 已从占位页升级为可用聊天视图，可展示用户/助手消息、空态与错误态。
+- 流式消费闭环：已在 thread service/store 接入 `chat.delta/chat.done/chat.error`，并按 `sessionId` 隔离增量拼接与收尾，防止串会话污染。
+- 首页发送行为：在首页直接发送会自动跳转到对应 `/:threadId`，并在发送发起后清空输入框。
+- 详情页返回行为：TopBar 返回按钮已可用，点击后会先保存当前会话摘要到前端历史（首条用户消息截断），再返回首页。
+- 历史卡片数据源：已从静态 mock 切换到前端 store 实时数据，支持点击跳转对应会话与删除历史项。
 
 ## 前后端分工开发计划（并行会话版）
 
@@ -116,8 +123,12 @@
 - 已完成附件清理规则：仅 `chat.done(stop|length)` 清空，`chat.error` 与 `chat.done(cancelled|error)` 保留。
 - 已完成基础发送 UX：无输入且无附件禁用发送；发送中禁用重复发送；附件超上限显示内联提示。
 - 已完成模型/推理选择显示同步：`OptionSelect` 支持受控值，切换会话展示不漂移。
-- 历史卡片 `HistorySearchCard` 已实现 `Command` 搜索、悬停删除、外部点击关闭。
-- 顶部栏历史图标与“查看全部”入口已联动打开历史卡片。
+- 已完成详情页最小可用：`ThreadDetailPage` 可展示会话消息、空态与错误态，替换占位页。
+- 已完成流式消息消费：`chat.delta/chat.done/chat.error` 已接入 session store 并按会话隔离更新。
+- 已完成首页发送跳转：首页发送后自动进入对应 `/:threadId`，并清空输入框。
+- 已完成详情页返回：返回按钮触发“保存摘要到历史 + 返回首页”。
+- 历史卡片 `HistorySearchCard` 已接入前端真实历史数据源，支持搜索、悬停删除、点击跳转与外部点击关闭。
+- 顶部栏历史图标与“查看全部”入口已联动打开同一历史卡片。
 
 #### 2) 代办
 
@@ -125,7 +136,8 @@
   - 历史记录点击后恢复对应会话上下文。
 - 错误态体验补齐：
   - 文件读取失败提示、provider 不可用提示。
-- 历史卡片数据源从 mock 切换到真实会话数据。
+- 历史记录与会话列表对齐：
+  - 将当前前端本地历史（摘要）切换为后端真实会话数据源并补齐持久化策略。
 
 #### 3) 注意事项
 
@@ -149,7 +161,7 @@
   - 回包 `context.files.picked` 并透传同一 `requestId`（用于前端 pending map 稳定命中）
 - 已新增设置与会话创建通道处理：
   - 处理 `settings.get/settings.update/settings.apiKey.set/settings.apiKey.delete`
-  - 回包 `settings.state`（`providerDefault/openaiBaseUrl/hasOpenAiApiKey`）
+  - 回包 `settings.state`（`providerDefault/openaiBaseUrl/hasOpenAiApiKey/openaiDefaultModel/openaiModels`）
   - 处理 `chat.session.create` 并回包 `chat.session.created`
 - LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。
 - 已完成 Provider 抽象层：
@@ -157,7 +169,8 @@
   - 错误已统一归一化（鉴权/限流/超时/网络/unknown provider|model）
 - 已完成 OpenAI 首接入（流式）：
   - 保持协议输出不变（`chat.delta/chat.done/chat.error`）
-  - `model/reasoningLevel` 已真实下传到 OpenAI 请求参数
+  - `model/reasoningLevel` 已真实下传到 OpenAI 请求参数（`ultra` -> `high`）
+  - 已支持 OpenAI-compatible `baseUrl` 透传与参数校验
   - requestId 在消息链路继续透传（按字段存在透传）
 - `ChatService` 已新增并接入主链路，handler 维持轻量路由职责。
 - `SettingsService` 与 `SessionService` 已新增，业务逻辑继续从 handler 下沉。
@@ -198,5 +211,5 @@
 - 第二家真实模型 provider 接入（Anthropic）。
 - 工具调用层（tool registry / tool executor）。
 - 更完整的上下文来源（workspace 搜索、诊断、git diff 等）。
-- 前端真实发送链路接入（将输入内容与上下文文件选择结果串到完整会话流）。
+- 前端历史记录切换到后端真实会话源并补齐跨重启持久化策略。
 - 自动化测试框架与回归用例。
