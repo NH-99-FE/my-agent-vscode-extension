@@ -34,7 +34,7 @@ export function WorkspaceLayout() {
           </>
         ) : null}
       </main>
-      <Composer />
+      <Composer routeThreadId={threadId} />
     </div>
   )
 }

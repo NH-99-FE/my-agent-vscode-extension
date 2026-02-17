@@ -60,7 +60,7 @@
 - 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
 - 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`。
-- 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。
+- 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。
 - LLM 流式层：已实现最小可用 `LlmClient`（当前 `mock` provider），支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
 - 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
@@ -78,15 +78,18 @@
 
 ## 当前实现进展（前端）
 
-截至当前，前端主线已完成聊天页核心交互骨架，重点如下：
+截至当前，前端主线已完成聊天页核心交互骨架与 P0 真实发送闭环，重点如下：
 
-- 通信桥接层：`webview-ui/src/lib/bridge.ts` 已与共享协议联动，支持基础聊天消息与上下文文件选择回包类型校验。
-- Composer 基础交互：已实现输入区自适应高度、模型选择与推理强度选择（基于通用 `OptionSelect`）。
-- Tooltip/Select 交互细节：已解决 Select 选中后 tooltip 再次弹出的问题，统一为 hover 优先的交互行为。
+- 通信桥接层：`webview-ui/src/lib/bridge.ts` 与共享协议联动，支持基础聊天消息与上下文文件选择回包类型校验。
+- Composer 基础交互：输入区自适应高度、模型选择与推理强度选择（基于通用 `OptionSelect`）已可用，且模型/推理下拉已改为受控同步，切换会话时展示与 store 保持一致。
+- 真实发送链路：`chat.send` 已按 `@agent/types` 严格发送 `text + model + reasoningLevel + attachments + sessionId`。
+- 发送逻辑收敛：Composer 内的协议组装与回包处理已下沉到 `features/thread` 的 service/store（Zustand）。
+- 会话隔离：已按 `sessionId` 维护 draft（text/model/reasoningLevel/attachments/inlineNotice）与发送态，切换会话不串状态。
+- 附件行为：`chat.done` 的 `stop/length` 成功态清空附件，`chat.error` 与 `cancelled/error` 不清空。
+- 附件回包关联：`context.files.pick/picked` 已接入 `requestId` 关联与前端 pending 映射，回包优先落回发起会话。
+- 基础 UX：无输入且无附件时禁用发送；发送中禁用重复发送；附件超上限提供 Composer 内联提示。
 - 历史记录搜索卡片：`HistorySearchCard` 已基于 shadcn `Command` 组件实现，支持搜索、列表展示、悬停删除、外部点击关闭。
 - 顶部栏与列表联动：支持通过“历史记录”图标与“查看全部”入口打开同一历史卡片，并在 thread/detail 页面复用。
-- 上下文文件附件区：已新增 `AddContextFiles` 组件，支持通过扩展侧文件选择器添加、展示为 chip、单项删除、去重与数量上限（20）。
-- 附件布局：附件区采用 `flex-wrap` 自动换行，不使用横向滚动条。
 
 ## 前后端分工开发计划（并行会话版）
 
@@ -99,20 +102,22 @@
 - `Composer` 已具备输入区、模型选择、推理强度选择、发送按钮基础 UI。
 - 已实现 `AddContextFiles` 附件区组件（添加后展示 chip、删除、自动换行）。
 - 已接入附件选择触发：点击 `+` 发送 `context.files.pick` 请求。
-- 已接入附件结果消费：监听 `context.files.picked` 回包并写入本地附件状态（去重、上限 20）。
+- 已接入附件结果消费：监听 `context.files.picked` 回包并写入本地附件状态（去重、上限 20），并通过 `requestId` + pending map 关联回发起会话。
+- 已打通真实发送链路：`chat.send` 严格携带 `text/model/reasoningLevel/attachments/sessionId`。
+- 已将发送链路与回包处理下沉至 `features/thread` 的 service/store（Zustand），减少 `Composer` 膨胀。
+- 已完成会话隔离：按 `sessionId` 维护 draft 与 sending 状态，避免切换会话串状态与发送态悬挂。
+- 已完成附件清理规则：仅 `chat.done(stop|length)` 清空，`chat.error` 与 `chat.done(cancelled|error)` 保留。
+- 已完成基础发送 UX：无输入且无附件禁用发送；发送中禁用重复发送；附件超上限显示内联提示。
+- 已完成模型/推理选择显示同步：`OptionSelect` 支持受控值，切换会话展示不漂移。
 - 历史卡片 `HistorySearchCard` 已实现 `Command` 搜索、悬停删除、外部点击关闭。
 - 顶部栏历史图标与“查看全部”入口已联动打开历史卡片。
 
 #### 2) 代办
 
-- 将真实发送链路接入前端：
-  - `chat.send` 发送时携带当前模型、推理强度、附件列表。
-  - 与后端新增协议字段对齐（避免前后端 payload 偏差）。
 - 完成会话维度状态管理收敛：
-  - 将 `Composer` 内请求/流式状态逐步下沉到独立 store/service。
   - 历史记录点击后恢复对应会话上下文。
 - 错误态体验补齐：
-  - 附件超过上限提示、文件读取失败提示、provider 不可用提示。
+  - 文件读取失败提示、provider 不可用提示。
 - 历史卡片数据源从 mock 切换到真实会话数据。
 
 #### 3) 注意事项
@@ -134,7 +139,7 @@
 - 已新增文件选择通道处理：
   - 处理 `context.files.pick`
   - 调用 `vscode.window.showOpenDialog`
-  - 回包 `context.files.picked`
+  - 回包 `context.files.picked` 并透传同一 `requestId`（用于前端 pending map 稳定命中）
 - LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。
 - `ChatService` 已新增并接入主链路，handler 维持轻量路由职责。
 - 会话持久化与密钥管理已有基础实现（`SessionStore`、`SecretStorage`）。
@@ -156,6 +161,7 @@
   - `packages/types/src/index.ts`
   - `webview-ui/src/lib/bridge.ts` runtime 白名单（如涉及 extension -> webview 新消息）
 - 所有新增消息都要有 requestId 透传策略，便于前端做请求级关联。
+- `context.files.pick/picked` 需固定执行 requestId 回传约束：只要入站消息带 `requestId` 字段，回包必须透传同值（避免退回前端 fallback 分支）。
 
 ### 三、前后端协同约定
 

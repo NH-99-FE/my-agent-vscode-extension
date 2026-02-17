@@ -45,6 +45,14 @@ function Demo() {
       payload: {
         sessionId: 'session-1',
         text: 'hello',
+        model: 'gpt-5.3-codex',
+        reasoningLevel: 'low',
+        attachments: [
+          {
+            path: 'E:/repo/README.md',
+            name: 'README.md',
+          },
+        ],
       },
     }
     bridge.send(message)
@@ -63,7 +71,14 @@ function Demo() {
 
 在 React 里必须 `return dispose`，避免重复监听和内存泄漏。
 
-## 5. 运行环境说明
+## 5.1 chat.done 与附件清理约定
+
+当收到 `chat.done` 时：
+
+- `finishReason = 'stop' | 'length'`：清空附件
+- `finishReason = 'cancelled' | 'error'`：保留附件，方便重试
+
+## 6. 运行环境说明
 
 `bridge` 依赖 VS Code 注入的 `acquireVsCodeApi()`。
 
@@ -75,7 +90,7 @@ function Demo() {
 - 调 UI：`pnpm dev:web`
 - 调前后端通信：用 VS Code `F5 -> Run Extension` 打开的宿主窗口
 
-## 6. 常见问题
+## 7. 常见问题
 
 1. 点击发送没反应  
    原因通常是当前不在 Webview 宿主环境，或未重新构建扩展产物。  

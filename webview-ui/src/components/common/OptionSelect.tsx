@@ -21,6 +21,8 @@ type OptionSelectProps = {
   showItemIcon?: boolean
   /** 默认选中项。 */
   defaultValue?: string
+  /** 受控选中值。 */
+  value?: string
   /** 选中值变化回调。 */
   onChange?: (value: string) => void
 }
@@ -31,12 +33,21 @@ export function OptionSelect({
   hoverTip,
   showItemIcon = true,
   defaultValue,
+  value: controlledValue,
   onChange,
 }: OptionSelectProps) {
-  const initial = defaultValue ?? options[0]?.value ?? ''
-  const [value, setValue] = React.useState(initial)
+  const initialValue = defaultValue ?? options[0]?.value ?? ''
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(initialValue)
   const [selectOpen, setSelectOpen] = React.useState(false)
   const [tooltipOpen, setTooltipOpen] = React.useState(false)
+  const isControlled = controlledValue !== undefined
+  const value = isControlled ? controlledValue : uncontrolledValue
+
+  React.useEffect(() => {
+    if (!isControlled) {
+      setUncontrolledValue(initialValue)
+    }
+  }, [initialValue, isControlled])
 
   const selected = options.find(option => option.value === value)
 
@@ -51,7 +62,9 @@ export function OptionSelect({
         }
       }}
       onValueChange={next => {
-        setValue(next)
+        if (!isControlled) {
+          setUncontrolledValue(next)
+        }
         // 将新值抛给父组件（例如写入配置或触发请求）。
         onChange?.(next)
         setTooltipOpen(false)

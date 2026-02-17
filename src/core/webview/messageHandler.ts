@@ -181,7 +181,7 @@ async function handleContextFilesPick(
   if (maxCount === 0) {
     await postTypedMessage(panel, {
       type: 'context.files.picked',
-      ...(message.requestId ? { requestId: message.requestId } : {}),
+      ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
       payload: { files: [] },
     })
     return
@@ -201,7 +201,7 @@ async function handleContextFilesPick(
 
   await postTypedMessage(panel, {
     type: 'context.files.picked',
-    ...(message.requestId ? { requestId: message.requestId } : {}),
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
     payload: { files },
   })
 }
@@ -313,7 +313,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
 
       const contextFilesPickMessage: WebviewToExtensionMessage = {
         type: 'context.files.pick',
-        ...(maybeMessage.requestId ? { requestId: maybeMessage.requestId } : {}),
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
         payload: {
           maxCount: payload.maxCount,
         },
