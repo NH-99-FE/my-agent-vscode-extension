@@ -1,7 +1,7 @@
-import bgLogo from '@/components/icons/bg-logo.svg'
 import { TaskList } from '../components/TasksList'
 import { useNavigate, useOutletContext } from 'react-router'
 import { useThreadHistoryItems } from '../store/threadWorkspaceStore'
+import { Webhook } from 'lucide-react'
 
 type ThreadOutletContext = {
   openHistoryCard: () => void
@@ -21,9 +21,7 @@ export const ThreadView = () => {
 
   return (
     <div className="relative h-full px-1">
-      <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-        <img src={bgLogo} alt="背景logo" className="size-10" />
-      </div>
+      <Webhook className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
       <TaskList
         tasks={tasks}
         onViewAllClick={openHistoryCard}
