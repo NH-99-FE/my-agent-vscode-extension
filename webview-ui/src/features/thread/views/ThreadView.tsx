@@ -19,16 +19,6 @@ export const ThreadView = () => {
     updatedAt: item.updatedAt,
   }))
 
-  if (tasks.length === 0) {
-    return (
-      <div className="relative h-full px-1">
-        <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-          <img src={bgLogo} alt="背景logo" className="size-10" />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="relative h-full px-1">
       <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
@@ -37,6 +27,7 @@ export const ThreadView = () => {
       <TaskList
         tasks={tasks}
         onViewAllClick={openHistoryCard}
+        emptyText="还没有对话记录哦"
         onItemClick={id => {
           navigate(`/${id}`)
         }}

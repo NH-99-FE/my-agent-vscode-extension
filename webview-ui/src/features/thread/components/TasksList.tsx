@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { Inbox, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { HoverCancelConfirm } from './HoverCancelConfirm'
 
@@ -10,6 +10,8 @@ type TaskItem = {
 
 type TaskListProps = {
   tasks: TaskItem[]
+  /** 列表为空时的提示文案，默认"暂无任务" */
+  emptyText?: string
   /** 点击“查看全部”回调，由父组件决定展示历史搜索卡片。 */
   onViewAllClick?: () => void
   /** 点击任务项回调 */
@@ -26,11 +28,21 @@ function formatTime(timestamp: number): string {
   return date.toLocaleDateString()
 }
 
-export const TaskList = ({ tasks, onViewAllClick, onItemClick }: TaskListProps) => {
+export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, onItemClick }: TaskListProps) => {
   // 当前鼠标悬停的任务 id：用于切换右侧显示（time <-> 删除入口）。
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   // 当前处于“确认删除”态的任务 id：保证同一时刻只确认一个任务。
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+
+  /* ---- 空状态 ---- */
+  if (tasks.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+        <Inbox className="h-8 w-8" />
+        <span className="text-sm">{emptyText}</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col overflow-hidden">
