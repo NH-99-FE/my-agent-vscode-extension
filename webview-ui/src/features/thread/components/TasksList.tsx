@@ -1,6 +1,7 @@
 import { Inbox, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { HoverCancelConfirm } from './HoverCancelConfirm'
+import { formatRelativeTime } from '@/lib/utils'
 
 type TaskItem = {
   id: string
@@ -16,16 +17,6 @@ type TaskListProps = {
   onViewAllClick?: () => void
   /** 点击任务项回调 */
   onItemClick?: (id: string) => void
-}
-
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const isToday = date.toDateString() === now.toDateString()
-  if (isToday) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-  return date.toLocaleDateString()
 }
 
 export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, onItemClick }: TaskListProps) => {
@@ -74,7 +65,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
                   }}
                 />
               ) : (
-                <span className="text-xs text-muted-foreground">{formatTime(item.updatedAt)}</span>
+                <span className="text-xs text-muted-foreground">{formatRelativeTime(item.updatedAt)}</span>
               )}
             </div>
           </div>
