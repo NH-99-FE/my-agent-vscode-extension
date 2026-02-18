@@ -163,11 +163,7 @@ function parseOpenAiChunk(value: unknown): {
   }
 }
 
-function mapReasoningLevel(level: LlmStreamRequest['reasoningLevel']): 'low' | 'medium' | 'high' {
-  // 协议有 ultra，OpenAI 当前仅到 high，这里做向下兼容映射。
-  if (level === 'ultra') {
-    return 'high'
-  }
+function mapReasoningLevel(level: LlmStreamRequest['reasoningLevel']): 'low' | 'medium' | 'high' | 'xhigh' {
   return level
 }
 

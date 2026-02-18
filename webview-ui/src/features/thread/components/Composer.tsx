@@ -34,10 +34,10 @@ const strengthOptions: Array<{ value: ReasoningLevel; label: string; icon: typeo
   { value: 'low', label: '弱', icon: Leaf },
   { value: 'medium', label: '中', icon: BrainIcon },
   { value: 'high', label: '强', icon: BrainCircuit },
-  { value: 'ultra', label: '超高', icon: BrainCog },
+  { value: 'xhigh', label: '超高', icon: BrainCog },
 ]
 
-const reasoningLevelSet = new Set<ReasoningLevel>(['low', 'medium', 'high', 'ultra'])
+const reasoningLevelSet = new Set<ReasoningLevel>(['low', 'medium', 'high', 'xhigh'])
 
 function isReasoningLevel(value: string): value is ReasoningLevel {
   return reasoningLevelSet.has(value as ReasoningLevel)

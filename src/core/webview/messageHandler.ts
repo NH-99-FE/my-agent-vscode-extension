@@ -604,7 +604,7 @@ function asNonEmptyString(value: unknown): string | undefined {
  * @returns 转换后的推理强度或 undefined
  */
 function asReasoningLevel(value: unknown): ReasoningLevel | undefined {
-  if (value === 'low' || value === 'medium' || value === 'high' || value === 'ultra') {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
     return value
   }
   return undefined

@@ -5,7 +5,7 @@ export interface MessageMeta {
 }
 
 // 推理强度等级
-export type ReasoningLevel = 'low' | 'medium' | 'high' | 'ultra' // 低、中、高、超高
+export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh' // 低、中、高、超高
 
 // 用户附加的上下文文件描述
 export interface ChatAttachment {
