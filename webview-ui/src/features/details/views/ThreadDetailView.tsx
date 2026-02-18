@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
-import { useThreadSessionActions, useThreadSessionError, useThreadSessionMessages } from '../store/threadSessionStore'
 import { cn } from '@/lib/utils'
+import { useEffect } from 'react'
+import { useThreadSessionActions, useThreadSessionError, useThreadSessionMessages } from '@/features/thread/store/threadSessionStore'
 
 type ThreadDetailViewProps = {
   threadId: string | undefined
