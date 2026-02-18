@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { HoverCancelConfirm } from './HoverCancelConfirm'
 import { type ThreadHistoryItem, useThreadWorkspaceActions } from '../store/threadWorkspaceStore'
 import { formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 type HistorySearchCardProps = {
   /** 历史列表数据（来自 workspace store）。 */
@@ -30,7 +31,10 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
               <CommandItem
                 key={item.sessionId}
                 value={`${item.title} ${formatRelativeTime(item.updatedAt)}`}
-                className="min-h-9 rounded-md"
+                className={cn(
+                  'min-h-9 rounded-md transition-colors data-[selected=true]:bg-transparent data-[selected=true]:text-foreground',
+                  hoveredId === item.sessionId ? 'bg-muted/85 dark:bg-[#33383f]' : 'bg-transparent'
+                )}
                 onSelect={() => {
                   onSelectItem(item.sessionId)
                 }}
@@ -45,7 +49,7 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
                   <div className="flex h-6 min-w-16 shrink-0 items-center justify-end">
                     {hoveredId === item.sessionId ? (
                       <HoverCancelConfirm
-                        icon={<Trash2 className="h-4 w-4 cursor-pointer" />}
+                        icon={<Trash2 className="h-4 w-4 text-current" />}
                         confirming={confirmingId === item.sessionId}
                         onEnterConfirm={() => setConfirmingId(item.sessionId)}
                         onConfirm={() => {

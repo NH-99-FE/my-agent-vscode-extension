@@ -28,7 +28,7 @@ export function HoverCancelConfirm({ icon, confirmText = '确认', confirming, o
         <button
           type="button"
           aria-label="action"
-          className="inline-flex cursor-pointer items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex cursor-pointer items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
           onClick={e => {
             e.stopPropagation()
             onEnterConfirm()

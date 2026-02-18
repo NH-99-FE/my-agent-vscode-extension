@@ -29,7 +29,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
-        <Inbox className="h-8 w-8" />
+        <Inbox className="h-5 w-5" />
         <span className="text-sm">{emptyText}</span>
       </div>
     )
@@ -56,7 +56,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
             <div className="flex min-w-16 shrink-0 items-center justify-end">
               {hoveredId === item.id ? (
                 <HoverCancelConfirm
-                  icon={<Trash2 className="h-4 w-4 cursor-pointer" />}
+                  icon={<Trash2 className="h-4 w-4 text-current" />}
                   confirming={confirmingId === item.id}
                   onEnterConfirm={() => setConfirmingId(item.id)}
                   onConfirm={() => {
@@ -74,7 +74,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
       {/* 底部查看全部 */}
       <span
         onClick={onViewAllClick}
-        className="mt-1 cursor-pointer px-1.5 text-sm text-accent-foreground/70 transition-colors duration-200 hover:text-accent-foreground"
+        className="mt-1 cursor-pointer px-1.5 text-xs text-muted-foreground transition-colors duration-200 hover:text-foreground"
       >
         查看全部
       </span>

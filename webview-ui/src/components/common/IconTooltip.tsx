@@ -22,7 +22,10 @@ export const IconTooltip = ({
           {children}
         </div>
       </TooltipTrigger>
-      <TooltipContent sideOffset={2} className="pointer-events-none border-border bg-accent text-accent-foreground shadow-xs">
+      <TooltipContent
+        sideOffset={2}
+        className="pointer-events-none border border-border bg-popover text-popover-foreground shadow-xs dark:border-[#3a3a3a]"
+      >
         <p>{tipText}</p>
       </TooltipContent>
     </Tooltip>

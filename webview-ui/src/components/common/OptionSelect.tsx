@@ -84,23 +84,30 @@ export function OptionSelect({
           >
             <SelectTrigger
               size="sm"
-              className="h-8 rounded-full border-0 bg-transparent px-2 text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-0"
+              className="h-8 rounded-full border-0 bg-transparent px-2 text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-0 data-[state=open]:bg-muted"
             >
               <span className="inline-flex items-center md:hidden">{selected ? <selected.icon className="h-4 w-4" /> : null}</span>
-              <span className="hidden md:inline">{selected?.label ?? title}</span>
+              <span className="hidden text-sm md:inline">{selected?.label ?? title}</span>
             </SelectTrigger>
           </div>
         </TooltipTrigger>
-        <TooltipContent sideOffset={2} className="pointer-events-none bg-accent text-accent-foreground shadow-xs">
+        <TooltipContent
+          sideOffset={2}
+          className="pointer-events-none border border-border bg-popover text-popover-foreground shadow-xs dark:border-[#3a3a3a]"
+        >
           <p>{hoverTip}</p>
         </TooltipContent>
       </Tooltip>
 
-      <SelectContent position="popper" align="start" className="min-w-40 rounded-xl border-border/50 bg-popover text-foreground shadow-xl">
+      <SelectContent
+        position="popper"
+        align="start"
+        className="shadow-x min-w-40 rounded-xl border-border/50 bg-popover text-foreground dark:border-[#3a3a3a]"
+      >
         <SelectGroup>
           <SelectLabel className="px-2 py-1.5 text-xs text-muted-foreground">{title}</SelectLabel>
           {options.map(option => (
-            <SelectItem key={option.value} value={option.value} disabled={option.disabled ?? false} className="rounded-md">
+            <SelectItem key={option.value} value={option.value} disabled={option.disabled ?? false} className="rounded-md text-sm">
               {showItemIcon && <option.icon className="h-4 w-4" />}
               {option.label}
             </SelectItem>

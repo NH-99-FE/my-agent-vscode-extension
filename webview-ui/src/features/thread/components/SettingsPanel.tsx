@@ -111,7 +111,7 @@ export const SettingsPanel = ({
 
         <div className="text-xs">
           <span className="text-muted-foreground">OpenAI API Key 状态：</span>
-          <span className={hasOpenAiApiKey ? 'text-green-600' : 'text-muted-foreground'}>{hasOpenAiApiKey ? '已配置' : '未配置'}</span>
+          <span className={hasOpenAiApiKey ? 'text-foreground' : 'text-muted-foreground'}>{hasOpenAiApiKey ? '已配置' : '未配置'}</span>
         </div>
 
         <label className="block text-xs text-muted-foreground">

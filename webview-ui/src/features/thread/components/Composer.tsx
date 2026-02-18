@@ -239,7 +239,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         </IconTooltip>
         <OptionSelect
           title="选择模型"
-          hoverTip="选择模型（来自设置）"
+          hoverTip="选择模型"
           options={modelOptions}
           showItemIcon={false}
           value={model}
