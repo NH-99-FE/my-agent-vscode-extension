@@ -24,6 +24,7 @@ type ThreadComposerDraft = {
 // 聊天输入区全局状态，负责管理会话隔离的草稿、发送态和文件选择请求关联
 type ThreadComposerState = {
   localSessionId: string // 本地兜底会话 ID：无路由 threadId 时复用该值
+  localSessionUsed: boolean // 标记本地会话是否已被使用（发送过消息）
   sessionId: string // 当前活跃会话 ID（路由优先，否则回落到 localSessionId）
   draftsBySession: Record<string, ThreadComposerDraft> // 按会话维护草稿，避免切换 thread 时串会话
   sendingBySession: Record<string, boolean> // 按会话维护发送态，避免跨会话回包导致 sending 悬挂
@@ -84,6 +85,7 @@ function getDraftOrDefault(state: ThreadComposerState, targetSessionId?: string)
 
 const useThreadComposerStore = create<ThreadComposerStore>((set, get) => ({
   localSessionId: DEFAULT_LOCAL_SESSION_ID,
+  localSessionUsed: false,
   sessionId: DEFAULT_LOCAL_SESSION_ID,
   draftsBySession: {
     [DEFAULT_LOCAL_SESSION_ID]: createDefaultDraft(),
@@ -92,18 +94,43 @@ const useThreadComposerStore = create<ThreadComposerStore>((set, get) => ({
   pendingContextPickByRequestId: {},
   actions: {
     initSession: routeThreadId => {
-      const fallbackSessionId = get().localSessionId
-      const nextSessionId = routeThreadId ?? fallbackSessionId
+      // 1. 如果有路由 threadId，直接使用（查看历史详情页）
+      if (routeThreadId) {
+        set(state => ({
+          sessionId: routeThreadId,
+          draftsBySession: state.draftsBySession[routeThreadId]
+            ? state.draftsBySession
+            : {
+                ...state.draftsBySession,
+                [routeThreadId]: createDefaultDraft(),
+              },
+        }))
+        return
+      }
 
-      set(state => ({
-        sessionId: nextSessionId,
-        draftsBySession: state.draftsBySession[nextSessionId]
-          ? state.draftsBySession
-          : {
-              ...state.draftsBySession,
-              [nextSessionId]: createDefaultDraft(),
-            },
-      }))
+      // 2. 如果是 Home 页（无 routeThreadId），检查当前 localSessionId 是否已被使用
+      // 如果已被使用（发送过消息），则生成新的 ID，确保“新聊天”总是新的
+      set(state => {
+        let nextLocalId = state.localSessionId
+        let nextLocalUsed = state.localSessionUsed
+
+        if (state.localSessionUsed) {
+          nextLocalId = crypto.randomUUID()
+          nextLocalUsed = false
+        }
+
+        return {
+          localSessionId: nextLocalId,
+          localSessionUsed: nextLocalUsed,
+          sessionId: nextLocalId,
+          draftsBySession: state.draftsBySession[nextLocalId]
+            ? state.draftsBySession
+            : {
+                ...state.draftsBySession,
+                [nextLocalId]: createDefaultDraft(),
+              },
+        }
+      })
     },
     setText: text => {
       set(state => {
@@ -245,12 +272,19 @@ const useThreadComposerStore = create<ThreadComposerStore>((set, get) => ({
       })
     },
     setSending: (targetSessionId, isSending) => {
-      set(state => ({
-        sendingBySession: {
-          ...state.sendingBySession,
-          [targetSessionId]: isSending,
-        },
-      }))
+      set(state => {
+        // 如果正在使用 localSessionId 发送消息，标记为已使用
+        // 下次进入 Home 时会生成新的 localId
+        const nextLocalSessionUsed = targetSessionId === state.localSessionId ? true : state.localSessionUsed
+
+        return {
+          sendingBySession: {
+            ...state.sendingBySession,
+            [targetSessionId]: isSending,
+          },
+          localSessionUsed: nextLocalSessionUsed,
+        }
+      })
     },
     setInlineNotice: (message, targetSessionId) => {
       set(state => {
