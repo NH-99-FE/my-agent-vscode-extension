@@ -27,18 +27,18 @@
   --card-foreground: #1f2328;
   --popover: #ffffff;
   --popover-foreground: #1f2328;
-  --primary: #0e639c;
-  --primary-foreground: #ffffff;
+  --primary: #2b6fd3;
+  --primary-foreground: #f8fbff;
   --secondary: #f3f3f3;
   --secondary-foreground: #1f2328;
   --muted: #f3f3f3;
   --muted-foreground: #616161;
   --accent: #e8e8e8;
   --accent-foreground: #1f2328;
-  --destructive: #d32f2f;
+  --destructive: #c94b59;
   --border: #d4d4d4;
   --input: #ffffff;
-  --ring: #0078d4;
+  --ring: transparent;
   --chart-1: #0e639c;
   --chart-2: #007acc;
   --chart-3: #3794ff;
@@ -62,18 +62,18 @@ body.vscode-light {
   --card-foreground: var(--vscode-editor-foreground, #1f2328);
   --popover: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
   --popover-foreground: var(--vscode-editor-foreground, #1f2328);
-  --primary: var(--vscode-button-background, #0e639c);
-  --primary-foreground: var(--vscode-button-foreground, #ffffff);
+  --primary: #2f73d8;
+  --primary-foreground: #ffffff;
   --secondary: var(--vscode-button-secondaryBackground, #f3f3f3);
   --secondary-foreground: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground, #1f2328));
   --muted: color-mix(in srgb, var(--vscode-editor-foreground, #1f2328) 8%, transparent);
   --muted-foreground: color-mix(in srgb, var(--vscode-editor-foreground, #1f2328) 70%, transparent);
   --accent: var(--vscode-list-hoverBackground, var(--vscode-button-secondaryBackground, #ececec));
   --accent-foreground: var(--vscode-editor-foreground, #1f2328);
-  --destructive: var(--vscode-errorForeground, #d32f2f);
+  --destructive: #cc4f5c;
   --border: var(--vscode-panel-border, #d4d4d4);
   --input: var(--vscode-input-background, var(--vscode-editor-background, #ffffff));
-  --ring: var(--vscode-focusBorder, #0078d4);
+  --ring: transparent;
 }
 
 /* VS Code dark theme */
@@ -84,18 +84,18 @@ body.vscode-dark {
   --card-foreground: #cccccc;
   --popover: #313131;
   --popover-foreground: #cccccc;
-  --primary: var(--vscode-button-background, #0e639c);
-  --primary-foreground: #ffffff;
+  --primary: #3b7ce0;
+  --primary-foreground: #f3f7ff;
   --secondary: #353535;
   --secondary-foreground: #c7c7c7;
   --muted: #393939;
   --muted-foreground: #9d9d9d;
   --accent: #404040;
   --accent-foreground: #d6d6d6;
-  --destructive: var(--vscode-errorForeground, #f14c4c);
+  --destructive: #d45f6e;
   --border: #343434;
   --input: #2b2b2b;
-  --ring: var(--vscode-focusBorder, #007fd4);
+  --ring: transparent;
 }
 
 /* VS Code high-contrast themes */
@@ -118,7 +118,7 @@ body.vscode-high-contrast-light {
   --destructive: var(--vscode-errorForeground, #ff6b6b);
   --border: var(--vscode-contrastBorder, var(--vscode-panel-border, #ffffff));
   --input: var(--vscode-input-background, var(--vscode-editor-background, #000000));
-  --ring: var(--vscode-focusBorder, #f38518);
+  --ring: transparent;
 }
 
 body {
