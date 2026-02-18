@@ -59,15 +59,15 @@
 
 - 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
-- 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`。
-- 设置/会话协议层：已新增 `settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`、`chat.session.create` 入站消息，以及 `settings.state`、`chat.session.created` 出站消息。
-- 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段已纳入 runtime 严格校验与 requestId 透传。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。
+- 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`、历史/会话通道 `chat.history.get`、`chat.history.delete`、`chat.history.list`、`chat.session.get`、`chat.session.state`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`，且 `requestId` 在类型层与运行时均为必填约束。
+- 设置/会话协议层：已新增 `settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`、`chat.session.create`、`chat.session.get`、`chat.history.delete` 入站消息，以及 `settings.state`、`chat.session.created`、`chat.session.state`、`chat.history.list` 出站消息。
+- 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段与必填 `requestId` 已纳入 runtime 严格校验并透传到流式回包。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。`chat.history.delete` 支持删除后回包最新 `chat.history.list`，`chat.session.get` 支持按 sessionId 回包 `chat.session.state`（找不到返回 null）。
 - LLM 流式层：已完成 provider 抽象（adapter + registry + 统一错误归一化），并接入 `mock/openai` 双通道，支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
 - 服务边界：已新增 `ChatService`，将 chat 请求组装、上下文拼装、会话写入与流式消费从 handler 下沉。
 - 设置服务：已新增 `SettingsService`，统一承接 provider/default、openai/baseUrl、openai/defaultModel、openai/models 配置读写，以及 OpenAI API Key 的 set/delete/has 状态回传。
 - 上下文构建：已实现基于活动编辑器的最小上下文采集（全文 + 选区，含截断策略），并新增附件上下文读取与拼装（文本读取、截断、二进制识别、失败跳过）。
-- 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入）。
+- 会话存储：已实现基于 `workspaceState` 的会话持久化（用户消息、助手增量、错误写入），并支持会话删除与 active session 清理。
 - 会话创建：已新增 `chat.session.create` 后端能力，可生成并返回新 `sessionId`，并更新 active session 语义。
 - 密钥存储：已实现基于 `SecretStorage` 的 API Key 管理（set/get/has/delete）。
 - Provider 请求参数：前端传入的 `model` 与 `reasoningLevel` 已下传到 provider 请求结构；OpenAI 适配中 `reasoningLevel=ultra` 映射为 `high`，其余档位原样透传。
@@ -81,6 +81,8 @@
 - 可通过后端配置切换到 OpenAI 并保持协议输出不变（`chat.delta/chat.done/chat.error`）。
 - 可通过 `settings.get/settings.update/settings.apiKey.*` 完成设置面板所需后端状态读取与更新闭环。
 - 可通过 `chat.session.create` 返回新会话 ID 用于前端“新会话”入口。
+- 可通过 `chat.session.get -> chat.session.state` 按会话懒加载恢复历史消息（跨重启恢复）。
+- 可通过 `chat.history.delete` 删除持久化会话并刷新历史列表。
 - 可在 `settings.state` 中读取 `openaiDefaultModel/openaiModels`，支撑前端模型配置面板。
 - 可对进行中的会话请求执行取消。
 - 可在后端保存并更新会话内容。
@@ -89,9 +91,9 @@
 
 截至当前，前端主线已完成聊天页核心交互骨架与 P0 真实发送闭环，重点如下：
 
-- 通信桥接层：`webview-ui/src/lib/bridge.ts` 与共享协议联动，支持基础聊天消息与上下文文件选择回包类型校验。
+- 通信桥接层：`webview-ui/src/lib/bridge.ts` 与共享协议联动，支持基础聊天消息、历史列表/会话状态回包（`chat.history.list`、`chat.session.state`）类型校验。
 - Composer 基础交互：输入区自适应高度、模型选择与推理强度选择（基于通用 `OptionSelect`）已可用，且模型/推理下拉已改为受控同步，切换会话时展示与 store 保持一致。
-- 真实发送链路：`chat.send` 已按 `@agent/types` 严格发送 `text + model + reasoningLevel + attachments + sessionId`。
+- 真实发送链路：`chat.send` 已按 `@agent/types` 严格发送 `requestId + text + model + reasoningLevel + attachments + sessionId`，并与后端 requestId 透传闭环联动。
 - 发送逻辑收敛：Composer 内的协议组装与回包处理已下沉到 `features/thread` 的 service/store（Zustand）。
 - 会话隔离：已按 `sessionId` 维护 draft（text/model/reasoningLevel/attachments/inlineNotice）与发送态，切换会话不串状态。
 - 附件行为：`chat.done` 的 `stop/length` 成功态清空附件，`chat.error` 与 `cancelled/error` 不清空。
@@ -101,9 +103,14 @@
 - 顶部栏与列表联动：支持通过“历史记录”图标与“查看全部”入口打开同一历史卡片，并在 thread/detail 页面复用。
 - 详情页最小可用：`/:threadId` 已从占位页升级为可用聊天视图，可展示用户/助手消息、空态与错误态。
 - 流式消费闭环：已在 thread service/store 接入 `chat.delta/chat.done/chat.error`，并按 `sessionId` 隔离增量拼接与收尾，防止串会话污染。
+- 流式防串门禁：已将 requestId 门禁收敛为单一 `streamRequestGuard` 规则源；`matched` 正常消费、`mismatch` 忽略、`missing+active` 协议错误收尾。
+- active request 收敛：已将 `activeRequestIdBySession` 收敛到 `threadSessionStore`（内容层），并在消息恢复时增加 active 会话保护，避免打断进行中流式请求。
 - 首页发送行为：在首页直接发送会自动跳转到对应 `/:threadId`，并在发送发起后清空输入框。
 - 详情页返回行为：TopBar 返回按钮已可用，点击后会先保存当前会话摘要到前端历史（首条用户消息截断），再返回首页。
-- 历史卡片数据源：已从静态 mock 切换到前端 store 实时数据，支持点击跳转对应会话与删除历史项。
+- 历史卡片数据源：已从静态 mock 切换到后端真实会话列表回包，支持点击跳转对应会话。
+- 历史删除闭环：`HistorySearchCard` 与首页 `TasksList` 的删除均已打通到后端 `chat.history.delete`，可删除持久化会话并刷新列表。
+- 会话懒恢复：进入 `/:threadId` 时可按 sessionId 发送 `chat.session.get` 并通过 `chat.session.state` 回填消息；已加“本地有消息/有 active 请求不恢复”门禁与请求去重，避免覆盖实时流。
+- 空会话治理：详情页返回仅在会话有消息时写历史；后端历史列表过滤空会话，避免多条“新会话”噪声。
 
 ## 前后端分工开发计划（并行会话版）
 
@@ -132,12 +139,10 @@
 
 #### 2) 代办
 
-- 完成会话维度状态管理收敛：
-  - 历史记录点击后恢复对应会话上下文。
 - 错误态体验补齐：
   - 文件读取失败提示、provider 不可用提示。
-- 历史记录与会话列表对齐：
-  - 将当前前端本地历史（摘要）切换为后端真实会话数据源并补齐持久化策略。
+- 会话恢复体验补齐：
+  - `chat.session.state` 回填的消息渲染规则（如历史错误消息映射、时间线细化）可继续优化。
 
 #### 3) 注意事项
 
@@ -211,5 +216,5 @@
 - 第二家真实模型 provider 接入（Anthropic）。
 - 工具调用层（tool registry / tool executor）。
 - 更完整的上下文来源（workspace 搜索、诊断、git diff 等）。
-- 前端历史记录切换到后端真实会话源并补齐跨重启持久化策略。
+- 历史/会话相关自动化回归测试（删除、恢复、流式与恢复并发场景）。
 - 自动化测试框架与回归用例。
