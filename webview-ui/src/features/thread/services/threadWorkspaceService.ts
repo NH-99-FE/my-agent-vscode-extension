@@ -1,4 +1,10 @@
-import type { ExtensionToWebviewMessage, ProviderDefault, SettingsStateMessage, WebviewToExtensionMessage } from '@agent/types'
+import type {
+  ChatSessionStateMessage,
+  ExtensionToWebviewMessage,
+  ProviderDefault,
+  SettingsStateMessage,
+  WebviewToExtensionMessage,
+} from '@agent/types'
 
 // 线程工作区消息操作接口
 type ThreadWorkspaceMessageActions = {
@@ -6,6 +12,7 @@ type ThreadWorkspaceMessageActions = {
   onSettingsState: (snapshot: SettingsStateMessage['payload'], requestId?: string) => void // 处理设置状态更新
   onSystemError: (message: string, requestId?: string) => void // 处理系统错误
   onSessionCreated: (sessionId: string) => void // 处理会话创建完成
+  onSessionState: (session: ChatSessionStateMessage['payload']['session'], requestId?: string) => void // 处理会话详情回包
   onHistoryList: (sessions: Array<{ id: string; title: string; updatedAt: number }>) => void // 处理历史列表更新
 }
 
@@ -150,6 +157,22 @@ export function buildChatHistoryDeleteMessage(requestId: string, sessionId: stri
 }
 
 /**
+ * 构建按会话 ID 获取会话详情消息
+ * @param requestId 请求 ID
+ * @param sessionId 会话 ID
+ * @returns 获取会话详情消息对象
+ */
+export function buildChatSessionGetMessage(requestId: string, sessionId: string): WebviewToExtensionMessage {
+  return {
+    type: 'chat.session.get',
+    requestId,
+    payload: {
+      sessionId,
+    },
+  }
+}
+
+/**
  * 处理线程工作区消息
  * @param message 扩展发送的消息
  * @param actions 线程工作区消息操作接口
@@ -172,6 +195,10 @@ export function handleThreadWorkspaceMessage(message: ExtensionToWebviewMessage,
     }
     case 'chat.history.list': {
       actions.onHistoryList(message.payload.sessions)
+      return
+    }
+    case 'chat.session.state': {
+      actions.onSessionState(message.payload.session, message.requestId)
       return
     }
     default: {

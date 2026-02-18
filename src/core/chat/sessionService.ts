@@ -9,6 +9,10 @@ export class SessionService {
     return { sessionId }
   }
 
+  async getSessionById(sessionId: string) {
+    return this.sessionStore.getSessionById(sessionId)
+  }
+
   async getSessions() {
     const sessions = await this.sessionStore.getSessions()
     // 新建但未产生消息的空会话不进入历史列表，避免出现批量“新会话”噪声。

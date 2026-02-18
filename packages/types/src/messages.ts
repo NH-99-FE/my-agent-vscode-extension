@@ -1,3 +1,5 @@
+import type { ChatSession } from './context'
+
 // 协议消息公共元信息
 // `requestId` 用于请求-响应配对，便于前端定位某次请求的返回
 export interface MessageMeta {
@@ -87,6 +89,14 @@ export interface ChatSessionCreateMessage extends MessageMeta {
   type: 'chat.session.create' // 消息类型
 }
 
+// 前端 -> 扩展：按 sessionId 获取会话详情
+export interface ChatSessionGetMessage extends MessageMeta {
+  type: 'chat.session.get' // 消息类型
+  payload: {
+    sessionId: string // 待恢复会话 ID
+  }
+}
+
 // 扩展 -> 前端：ping 的响应消息
 export interface PongMessage extends MessageMeta {
   type: 'pong' // 消息类型
@@ -169,6 +179,14 @@ export interface ChatSessionCreatedMessage extends MessageMeta {
   }
 }
 
+// 扩展 -> 前端：指定会话状态回包
+export interface ChatSessionStateMessage extends MessageMeta {
+  type: 'chat.session.state' // 消息类型
+  payload: {
+    session: Pick<ChatSession, 'id' | 'title' | 'createdAt' | 'updatedAt' | 'messages'> | null
+  }
+}
+
 // 前端 -> 扩展：获取会话列表
 export interface ChatHistoryGetMessage extends MessageMeta {
   type: 'chat.history.get' // 消息类型
@@ -205,6 +223,7 @@ export type ExtensionToWebviewMessage =
   | ContextFilesPickedMessage
   | SettingsStateMessage
   | ChatSessionCreatedMessage
+  | ChatSessionStateMessage
   | ChatHistoryListMessage
 
 // Webview 发给扩展的所有入站消息联合类型
@@ -218,5 +237,6 @@ export type WebviewToExtensionMessage =
   | SettingsApiKeySetMessage
   | SettingsApiKeyDeleteMessage
   | ChatSessionCreateMessage
+  | ChatSessionGetMessage
   | ChatHistoryGetMessage
   | ChatHistoryDeleteMessage

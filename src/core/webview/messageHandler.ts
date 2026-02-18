@@ -77,6 +77,9 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
         case 'chat.session.create':
           await handleChatSessionCreate(panel, parsedMessage, sessionService)
           break
+        case 'chat.session.get':
+          await handleChatSessionGet(panel, parsedMessage, sessionService)
+          break
         case 'chat.history.get':
           await handleChatHistoryGet(panel, parsedMessage, sessionService)
           break
@@ -304,6 +307,29 @@ async function handleChatSessionCreate(
     ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
     payload: {
       sessionId: created.sessionId,
+    },
+  })
+}
+
+async function handleChatSessionGet(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'chat.session.get' }>,
+  sessionService: SessionService
+): Promise<void> {
+  const session = await sessionService.getSessionById(message.payload.sessionId)
+  await postTypedMessage(panel, {
+    type: 'chat.session.state',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: {
+      session: session
+        ? {
+            id: session.id,
+            title: session.title,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            messages: session.messages,
+          }
+        : null,
     },
   })
 }
@@ -559,6 +585,26 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
         ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
       }
       return sessionCreateMessage
+    }
+    case 'chat.session.get': {
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return undefined
+      }
+
+      const payload = maybeMessage.payload as Record<string, unknown>
+      const sessionId = asNonEmptyString(payload.sessionId)
+      if (!sessionId) {
+        return undefined
+      }
+
+      const sessionGetMessage: WebviewToExtensionMessage = {
+        type: 'chat.session.get',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+        payload: {
+          sessionId,
+        },
+      }
+      return sessionGetMessage
     }
     case 'chat.history.get': {
       if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {

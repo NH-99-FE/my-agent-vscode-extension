@@ -7,6 +7,7 @@ import { SettingsPanel } from '@/features/thread/components/SettingsPanel'
 import { bridge } from '@/lib/bridge'
 import {
   buildChatHistoryDeleteMessage,
+  buildChatSessionGetMessage,
   buildHistoryTitleFromMessages,
   buildChatHistoryGetMessage,
   buildCreateSessionMessage,
@@ -32,7 +33,11 @@ import {
   useThreadHistoryItems,
   useThreadWorkspaceActions,
 } from '@/features/thread/store/threadWorkspaceStore'
-import { useThreadSessionMessages } from '@/features/thread/store/threadSessionStore'
+import {
+  useThreadSessionActions,
+  useThreadSessionHasActiveRequest,
+  useThreadSessionMessages,
+} from '@/features/thread/store/threadSessionStore'
 
 export function WorkspaceLayout() {
   const navigate = useNavigate()
@@ -49,6 +54,7 @@ export function WorkspaceLayout() {
   const settingsApiKeyInput = useSettingsApiKeyInput()
   const historyItems = useThreadHistoryItems()
   const currentThreadMessages = useThreadSessionMessages(threadId)
+  const hasActiveThreadRequest = useThreadSessionHasActiveRequest(threadId)
   const hasOpenAiApiKey = useHasOpenAiApiKey()
   const settingsLoading = useSettingsLoading()
   const settingsSaving = useSettingsSaving()
@@ -57,6 +63,8 @@ export function WorkspaceLayout() {
   const settingsRequestIndexByIdRef = useRef(new Map<string, number>())
   const latestAppliedSettingsOrderRef = useRef(0)
   const pendingSettingsMutationRequestIdsRef = useRef(new Set<string>())
+  const pendingSessionGetByRequestIdRef = useRef(new Map<string, string>())
+  const pendingSessionGetSessionIdsRef = useRef(new Set<string>())
   const {
     setSettingsOpen,
     beginCreateSession,
@@ -75,6 +83,7 @@ export function WorkspaceLayout() {
     upsertThreadHistory,
     setThreadHistory,
   } = useThreadWorkspaceActions()
+  const { hydrateSessionFromBackend, setSessionError } = useThreadSessionActions()
 
   const trackSettingsRequest = useCallback((requestId: string): void => {
     settingsRequestOrderRef.current += 1
@@ -110,6 +119,20 @@ export function WorkspaceLayout() {
 
   const requestHistory = useCallback(() => {
     bridge.send(buildChatHistoryGetMessage(crypto.randomUUID()))
+  }, [])
+
+  const requestSessionState = useCallback((sessionId: string) => {
+    const normalizedSessionId = sessionId.trim()
+    if (!normalizedSessionId) {
+      return
+    }
+    if (pendingSessionGetSessionIdsRef.current.has(normalizedSessionId)) {
+      return
+    }
+    const requestId = crypto.randomUUID()
+    pendingSessionGetByRequestIdRef.current.set(requestId, normalizedSessionId)
+    pendingSessionGetSessionIdsRef.current.add(normalizedSessionId)
+    bridge.send(buildChatSessionGetMessage(requestId, normalizedSessionId))
   }, [])
 
   const deleteHistorySession = useCallback(
@@ -235,6 +258,15 @@ export function WorkspaceLayout() {
         },
         onSystemError: (errorMessage, requestId) => {
           if (requestId) {
+            const pendingSessionId = pendingSessionGetByRequestIdRef.current.get(requestId)
+            if (pendingSessionId) {
+              pendingSessionGetByRequestIdRef.current.delete(requestId)
+              pendingSessionGetSessionIdsRef.current.delete(pendingSessionId)
+              setSessionError(pendingSessionId, errorMessage)
+              return
+            }
+          }
+          if (requestId) {
             pendingSettingsMutationRequestIdsRef.current.delete(requestId)
           }
           setSettingsError(errorMessage)
@@ -251,6 +283,22 @@ export function WorkspaceLayout() {
             }))
           )
         },
+        onSessionState: (session, requestId) => {
+          const requestedSessionId = requestId ? pendingSessionGetByRequestIdRef.current.get(requestId) : undefined
+          if (requestId) {
+            pendingSessionGetByRequestIdRef.current.delete(requestId)
+          }
+          if (requestedSessionId) {
+            pendingSessionGetSessionIdsRef.current.delete(requestedSessionId)
+          }
+          if (session) {
+            hydrateSessionFromBackend(session)
+            return
+          }
+          if (requestedSessionId) {
+            setSessionError(requestedSessionId, '会话不存在或已删除。')
+          }
+        },
       })
     })
 
@@ -264,7 +312,20 @@ export function WorkspaceLayout() {
     setSettingsError,
     setThreadHistory,
     shouldApplySettingsResponse,
+    hydrateSessionFromBackend,
+    setSessionError,
   ])
+
+  useEffect(() => {
+    if (!threadId || !threadId.trim()) {
+      return
+    }
+    // 本地已有消息或该会话仍在流式中时，不触发后端恢复，避免覆盖/打断实时链路。
+    if (currentThreadMessages.length > 0 || hasActiveThreadRequest) {
+      return
+    }
+    requestSessionState(threadId)
+  }, [currentThreadMessages.length, hasActiveThreadRequest, requestSessionState, threadId])
 
   // 计算当前会话标题
   const currentSessionTitle = threadId ? (historyItems.find(item => item.sessionId === threadId)?.title ?? '新会话') : ''

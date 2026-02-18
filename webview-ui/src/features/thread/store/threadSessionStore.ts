@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ChatDoneMessage } from '@agent/types'
+import type { ChatDoneMessage, ChatSession } from '@agent/types'
 
 // 消息角色：用户或助手
 export type ThreadMessageRole = 'user' | 'assistant'
@@ -43,6 +43,7 @@ type ThreadSessionStoreActions = {
   appendAssistantDelta: (sessionId: string, textDelta: string) => void // 消费 chat.delta，将增量拼接到助手消息
   completeAssistantMessage: (sessionId: string, finishReason: ThreadFinishReason) => void // 消费 chat.done，更新助手消息结束态
   setAssistantError: (sessionId: string, errorMessage: string) => void // 消费 chat.error，标记助手消息错误
+  hydrateSessionFromBackend: (session: ChatSession) => void // 用后端会话消息覆盖并恢复前端会话状态
   setSessionError: (sessionId: string, error: string | null) => void // 设置会话级错误（用于详情页错误提示）
   setSessionProtocolError: (sessionId: string, message: string) => void // 设置协议级错误（可见错误）
 }
@@ -156,6 +157,21 @@ function markAssistantStreamError(message: ThreadMessageItem, errorMessage: stri
     finishReason: 'error',
     errorMessage,
   }
+}
+
+// 后端角色映射到前端展示角色；非 user 统一按 assistant 展示。
+function mapBackendRole(role: ChatSession['messages'][number]['role']): ThreadMessageRole {
+  return role === 'user' ? 'user' : 'assistant'
+}
+
+function mapBackendMessagesToThreadMessages(messages: ChatSession['messages']): ThreadMessageItem[] {
+  return messages.map(message => ({
+    id: createMessageId(),
+    role: mapBackendRole(message.role),
+    text: message.content,
+    createdAt: message.timestamp,
+    status: 'done',
+  }))
 }
 
 const useThreadSessionStore = create<ThreadSessionStore>((set, get) => ({
@@ -387,6 +403,35 @@ const useThreadSessionStore = create<ThreadSessionStore>((set, get) => ({
         }
       })
     },
+    /** 用后端会话快照恢复消息；若会话仍有活跃请求则跳过，避免打断流式链路 */
+    hydrateSessionFromBackend: session => {
+      if (!isValidSessionId(session.id)) {
+        return
+      }
+
+      set(state => {
+        if (state.activeRequestIdBySession[session.id] !== undefined) {
+          return {}
+        }
+
+        const nextActiveAssistantMessageIdBySession = { ...state.activeAssistantMessageIdBySession }
+        delete nextActiveAssistantMessageIdBySession[session.id]
+        const nextActiveRequestIdBySession = { ...state.activeRequestIdBySession }
+        delete nextActiveRequestIdBySession[session.id]
+
+        return {
+          sessionsById: {
+            ...state.sessionsById,
+            [session.id]: {
+              messages: mapBackendMessagesToThreadMessages(session.messages),
+              error: null,
+            },
+          },
+          activeAssistantMessageIdBySession: nextActiveAssistantMessageIdBySession,
+          activeRequestIdBySession: nextActiveRequestIdBySession,
+        }
+      })
+    },
     /** 设置会话级错误（不影响消息列表） */
     setSessionError: (sessionId, error) => {
       if (!isValidSessionId(sessionId)) {
@@ -496,4 +541,16 @@ export const useThreadSessionError = (sessionId: string | undefined) =>
       return null
     }
     return state.sessionsById[sessionId]?.error ?? null
+  })
+
+/**
+ * 判断指定会话是否存在进行中的活跃请求
+ * @param sessionId 会话 ID，传入 undefined 时返回 false
+ */
+export const useThreadSessionHasActiveRequest = (sessionId: string | undefined) =>
+  useThreadSessionStore(state => {
+    if (!sessionId) {
+      return false
+    }
+    return state.activeRequestIdBySession[sessionId] !== undefined
   })
