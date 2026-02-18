@@ -260,7 +260,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         />
       </div>
       {activeInlineNotice ? <p className="mt-1 px-1 text-xs text-destructive">{activeInlineNotice}</p> : null}
-      <div className="absolute right-2 bottom-2">
+      <div className="absolute right-2 bottom-1.5">
         <IconTooltip tipText="发送消息" hasBackground={true}>
           <button
             type="button"

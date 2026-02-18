@@ -30,7 +30,7 @@ export const TopBar = ({
   return (
     <div className="flex h-8 w-full items-center justify-between gap-4 overflow-hidden px-2.5">
       {mode === 'thread' ? (
-        <span className="text-muted-foreground">任务</span>
+        <span className="text-muted-foreground select-none">任务</span>
       ) : (
         <div className="flex min-w-0 items-center gap-2">
           <div className="shrink-0">

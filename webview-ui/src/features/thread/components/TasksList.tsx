@@ -30,7 +30,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
         <Inbox className="h-5 w-5" />
-        <span className="text-sm">{emptyText}</span>
+        <span className="text-sm select-none">{emptyText}</span>
       </div>
     )
   }
