@@ -230,7 +230,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         <IconTooltip tipText="添加文件等">
           <button
             type="button"
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             onClick={handlePickContextFiles}
             aria-label="添加上下文文件"
           >
