@@ -128,6 +128,22 @@ export class SessionStore {
     return session
   }
 
+  async deleteSession(sessionId: string): Promise<void> {
+    const normalizedSessionId = sessionId.trim()
+    if (!normalizedSessionId) {
+      return
+    }
+
+    const sessions = await this.getSessions()
+    const nextSessions = sessions.filter(session => session.id !== normalizedSessionId)
+    await this.saveSessions(nextSessions)
+
+    const activeSessionId = await this.getActiveSessionId()
+    if (activeSessionId === normalizedSessionId) {
+      await this.context.workspaceState.update(ACTIVE_SESSION_ID_KEY, undefined)
+    }
+  }
+
   private async saveSessions(sessions: ChatSession[]): Promise<void> {
     const sortedSessions = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
     await this.context.workspaceState.update(SESSION_LIST_KEY, sortedSessions)

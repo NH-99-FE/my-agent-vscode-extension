@@ -11,9 +11,11 @@ type HistorySearchCardProps = {
   items: ThreadHistoryItem[]
   /** 选择某条历史时，由外层决定跳转与浮层收起。 */
   onSelectItem: (sessionId: string) => void
+  /** 删除某条历史时，由外层决定是否同步后端删除。 */
+  onDeleteItem: (sessionId: string) => void
 }
 
-export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProps) => {
+export const HistorySearchCard = ({ items, onSelectItem, onDeleteItem }: HistorySearchCardProps) => {
   const { removeThreadHistory } = useThreadWorkspaceActions()
   // 当前悬停项：用于切换右侧“时间/删除入口”。
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -55,6 +57,7 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
                         onConfirm={() => {
                           // 二次确认后删除当前项。
                           removeThreadHistory(item.sessionId)
+                          onDeleteItem(item.sessionId)
                           setConfirmingId(null)
                         }}
                       />

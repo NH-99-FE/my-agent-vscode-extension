@@ -17,9 +17,11 @@ type TaskListProps = {
   onViewAllClick?: () => void
   /** 点击任务项回调 */
   onItemClick?: (id: string) => void
+  /** 删除任务项回调 */
+  onDelete?: (id: string) => void
 }
 
-export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, onItemClick }: TaskListProps) => {
+export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, onItemClick, onDelete }: TaskListProps) => {
   // 当前鼠标悬停的任务 id：用于切换右侧显示（time <-> 删除入口）。
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   // 当前处于“确认删除”态的任务 id：保证同一时刻只确认一个任务。
@@ -60,7 +62,7 @@ export const TaskList = ({ tasks, emptyText = '暂无任务', onViewAllClick, on
                   confirming={confirmingId === item.id}
                   onEnterConfirm={() => setConfirmingId(item.id)}
                   onConfirm={() => {
-                    // onDelete?.(item.id)
+                    onDelete?.(item.id)
                     setConfirmingId(null)
                   }}
                 />

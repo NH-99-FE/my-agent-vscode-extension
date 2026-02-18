@@ -14,6 +14,10 @@ export class SessionService {
     // 新建但未产生消息的空会话不进入历史列表，避免出现批量“新会话”噪声。
     return sessions.filter(session => session.messages.length > 0)
   }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.sessionStore.deleteSession(sessionId)
+  }
 }
 
 function createSessionId(): string {

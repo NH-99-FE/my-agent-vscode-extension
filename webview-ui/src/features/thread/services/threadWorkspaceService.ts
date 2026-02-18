@@ -134,6 +134,22 @@ export function buildChatHistoryGetMessage(requestId: string): WebviewToExtensio
 }
 
 /**
+ * 构建删除历史会话消息
+ * @param requestId 请求 ID
+ * @param sessionId 待删除会话 ID
+ * @returns 删除历史会话消息对象
+ */
+export function buildChatHistoryDeleteMessage(requestId: string, sessionId: string): WebviewToExtensionMessage {
+  return {
+    type: 'chat.history.delete',
+    requestId,
+    payload: {
+      sessionId,
+    },
+  }
+}
+
+/**
  * 处理线程工作区消息
  * @param message 扩展发送的消息
  * @param actions 线程工作区消息操作接口

@@ -5,10 +5,11 @@ import { Webhook } from 'lucide-react'
 
 type ThreadOutletContext = {
   openHistoryCard: () => void
+  deleteHistorySession: (sessionId: string) => void
 }
 
 export const ThreadView = () => {
-  const { openHistoryCard } = useOutletContext<ThreadOutletContext>()
+  const { openHistoryCard, deleteHistorySession } = useOutletContext<ThreadOutletContext>()
   const historyItems = useThreadHistoryItems()
   const navigate = useNavigate()
 
@@ -29,6 +30,7 @@ export const ThreadView = () => {
         onItemClick={id => {
           navigate(`/${id}`)
         }}
+        onDelete={deleteHistorySession}
       />
     </div>
   )

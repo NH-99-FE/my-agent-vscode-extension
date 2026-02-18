@@ -7,6 +7,7 @@ export type {
   ChatDoneMessage,
   ChatDeltaMessage,
   ChatErrorMessage,
+  ChatHistoryDeleteMessage,
   ChatSessionCreatedMessage,
   ChatSessionCreateMessage,
   ChatSendMessage,

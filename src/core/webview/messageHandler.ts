@@ -80,6 +80,9 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
         case 'chat.history.get':
           await handleChatHistoryGet(panel, parsedMessage, sessionService)
           break
+        case 'chat.history.delete':
+          await handleChatHistoryDelete(panel, parsedMessage, sessionService)
+          break
       }
     } catch (error) {
       await postSystemError(panel, toErrorMessage(error), parsedMessage.requestId)
@@ -326,6 +329,28 @@ async function handleChatHistoryGet(
   })
 }
 
+async function handleChatHistoryDelete(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'chat.history.delete' }>,
+  sessionService: SessionService
+): Promise<void> {
+  await sessionService.deleteSession(message.payload.sessionId)
+  const sessions = await sessionService.getSessions()
+  const historyList = sessions.map(session => ({
+    id: session.id,
+    title: session.title,
+    updatedAt: session.updatedAt,
+  }))
+
+  await postTypedMessage(panel, {
+    type: 'chat.history.list',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: {
+      sessions: historyList,
+    },
+  })
+}
+
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
@@ -545,6 +570,26 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
         ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
       }
       return chatHistoryGetMessage
+    }
+    case 'chat.history.delete': {
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return undefined
+      }
+
+      const payload = maybeMessage.payload as Record<string, unknown>
+      const sessionId = asNonEmptyString(payload.sessionId)
+      if (!sessionId) {
+        return undefined
+      }
+
+      const chatHistoryDeleteMessage: WebviewToExtensionMessage = {
+        type: 'chat.history.delete',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+        payload: {
+          sessionId,
+        },
+      }
+      return chatHistoryDeleteMessage
     }
     default:
       return undefined

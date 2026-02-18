@@ -174,6 +174,14 @@ export interface ChatHistoryGetMessage extends MessageMeta {
   type: 'chat.history.get' // 消息类型
 }
 
+// 前端 -> 扩展：删除指定会话
+export interface ChatHistoryDeleteMessage extends MessageMeta {
+  type: 'chat.history.delete' // 消息类型
+  payload: {
+    sessionId: string // 待删除会话 ID
+  }
+}
+
 // 扩展 -> 前端：会话列表回包
 export interface ChatHistoryListMessage extends MessageMeta {
   type: 'chat.history.list' // 消息类型
@@ -211,3 +219,4 @@ export type WebviewToExtensionMessage =
   | SettingsApiKeyDeleteMessage
   | ChatSessionCreateMessage
   | ChatHistoryGetMessage
+  | ChatHistoryDeleteMessage

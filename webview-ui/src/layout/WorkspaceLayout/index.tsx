@@ -6,6 +6,7 @@ import { HistorySearchCard } from '@/features/thread/components/HistorySearchCar
 import { SettingsPanel } from '@/features/thread/components/SettingsPanel'
 import { bridge } from '@/lib/bridge'
 import {
+  buildChatHistoryDeleteMessage,
   buildHistoryTitleFromMessages,
   buildChatHistoryGetMessage,
   buildCreateSessionMessage,
@@ -70,6 +71,7 @@ export function WorkspaceLayout() {
     setSettingsModelsText,
     setSettingsApiKeyInput,
     clearSettingsApiKeyInput,
+    removeThreadHistory,
     upsertThreadHistory,
     setThreadHistory,
   } = useThreadWorkspaceActions()
@@ -109,6 +111,21 @@ export function WorkspaceLayout() {
   const requestHistory = useCallback(() => {
     bridge.send(buildChatHistoryGetMessage(crypto.randomUUID()))
   }, [])
+
+  const deleteHistorySession = useCallback(
+    (sessionId: string) => {
+      const normalizedSessionId = sessionId.trim()
+      if (!normalizedSessionId) {
+        return
+      }
+      removeThreadHistory(normalizedSessionId)
+      bridge.send(buildChatHistoryDeleteMessage(crypto.randomUUID(), normalizedSessionId))
+      if (threadId === normalizedSessionId) {
+        navigate('/')
+      }
+    },
+    [navigate, removeThreadHistory, threadId]
+  )
 
   const saveSettings = useCallback(() => {
     const normalizedModels = parseModelsText(settingsModelsText)
@@ -281,6 +298,8 @@ export function WorkspaceLayout() {
           context={{
             // 通过 Outlet context 暴露给 ThreadView，用于“查看全部”直接打开卡片。
             openHistoryCard: () => setHistoryOpen(true),
+            // 复用同一删除链路，保证首页任务列表与历史卡片行为一致。
+            deleteHistorySession,
           }}
         />
         {historyOpen ? (
@@ -294,6 +313,7 @@ export function WorkspaceLayout() {
                   setSettingsOpen(false)
                   navigate(`/${sessionId}`)
                 }}
+                onDeleteItem={deleteHistorySession}
               />
             </div>
           </>
