@@ -184,12 +184,15 @@ export function WorkspaceLayout() {
       return
     }
 
-    const title = buildHistoryTitleFromMessages(currentThreadMessages)
-    upsertThreadHistory({
-      sessionId: threadId,
-      title,
-      updatedAt: Date.now(),
-    })
+    // 空会话返回首页时不写入历史，避免连续新建会话产生多条“新会话”记录。
+    if (currentThreadMessages.length > 0) {
+      const title = buildHistoryTitleFromMessages(currentThreadMessages)
+      upsertThreadHistory({
+        sessionId: threadId,
+        title,
+        updatedAt: Date.now(),
+      })
+    }
     setHistoryOpen(false)
     setSettingsOpen(false)
     navigate('/')
