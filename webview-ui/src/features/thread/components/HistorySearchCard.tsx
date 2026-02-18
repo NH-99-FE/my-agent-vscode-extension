@@ -3,29 +3,13 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { HoverCancelConfirm } from './HoverCancelConfirm'
 import { type ThreadHistoryItem, useThreadWorkspaceActions } from '../store/threadWorkspaceStore'
+import { formatRelativeTime } from '@/lib/utils'
 
 type HistorySearchCardProps = {
   /** 历史列表数据（来自 workspace store）。 */
   items: ThreadHistoryItem[]
   /** 选择某条历史时，由外层决定跳转与浮层收起。 */
   onSelectItem: (sessionId: string) => void
-}
-
-function formatRelativeTime(updatedAt: number): string {
-  const deltaMs = Date.now() - updatedAt
-  if (deltaMs < 60_000) {
-    return '刚刚'
-  }
-  const minutes = Math.floor(deltaMs / 60_000)
-  if (minutes < 60) {
-    return `${minutes} 分钟前`
-  }
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    return `${hours} 小时前`
-  }
-  const days = Math.floor(hours / 24)
-  return `${days} 天前`
 }
 
 export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProps) => {
@@ -46,7 +30,7 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
               <CommandItem
                 key={item.sessionId}
                 value={`${item.title} ${formatRelativeTime(item.updatedAt)}`}
-                className="rounded-md px-2 py-2"
+                className="min-h-9 rounded-md"
                 onSelect={() => {
                   onSelectItem(item.sessionId)
                 }}
@@ -58,7 +42,7 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  <div className="flex min-w-16 shrink-0 items-center justify-end">
+                  <div className="flex h-6 min-w-16 shrink-0 items-center justify-end">
                     {hoveredId === item.sessionId ? (
                       <HoverCancelConfirm
                         icon={<Trash2 className="h-4 w-4 cursor-pointer" />}
@@ -71,7 +55,9 @@ export const HistorySearchCard = ({ items, onSelectItem }: HistorySearchCardProp
                         }}
                       />
                     ) : (
-                      <span className="text-xs text-muted-foreground">{formatRelativeTime(item.updatedAt)}</span>
+                      <span className="inline-flex h-6 items-center text-xs text-muted-foreground">
+                        {formatRelativeTime(item.updatedAt)}
+                      </span>
                     )}
                   </div>
                 </div>

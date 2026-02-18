@@ -1,5 +1,5 @@
 import type { ReasoningLevel } from '@agent/types'
-import { Bot, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react'
+import { Box, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react'
 import { IconTooltip } from '@/components/common/IconTooltip'
 import { ArrowUp } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
@@ -90,17 +90,16 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }))
   const remainingContextFiles = getContextFilesRemaining(attachments.length)
   const maxHeight = 200
-  const missingModelNotice =
-    !model.trim() && (text.trim().length > 0 || attachments.length > 0) ? '请先在设置中配置默认模型' : null
+  const missingModelNotice = !model.trim() && (text.trim().length > 0 || attachments.length > 0) ? '请先在设置中配置默认模型' : null
   const activeInlineNotice = missingModelNotice ?? inlineNotice
   const modelOptions = useMemo(
     () =>
       settingsModelOptions.map(modelId => ({
         value: modelId,
         label: modelId,
-        icon: Bot,
+        icon: Box,
       })),
-    [settingsModelOptions],
+    [settingsModelOptions]
   )
 
   const resizeTextarea = () => {
@@ -195,7 +194,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         model,
         reasoningLevel,
         attachments,
-      }),
+      })
     )
     // 发送成功发起后立即清空输入框，避免旧草稿残留在输入区。
     setText('')
@@ -272,7 +271,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
               'rounded-full p-1 transition-colors duration-150',
               canSend
                 ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90'
-                : 'cursor-not-allowed bg-muted text-muted-foreground',
+                : 'cursor-not-allowed bg-muted text-muted-foreground'
             )}
           >
             <ArrowUp className="h-6 w-6" />
