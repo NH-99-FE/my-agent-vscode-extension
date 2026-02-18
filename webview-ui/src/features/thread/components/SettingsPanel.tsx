@@ -143,7 +143,7 @@ export const SettingsPanel = ({
             <div className="rounded-md border border-border bg-input">
               <Textarea
                 id="settings-models-text"
-                className="h-24 max-h-24 overflow-y-auto py-2 text-sm placeholder:text-xs"
+                className="h-24 max-h-16 overflow-y-auto py-2 text-sm placeholder:text-xs"
                 value={modelsText}
                 onChange={event => onModelsTextChange(event.target.value)}
                 placeholder={'例如:\nZhipuAI/GLM-5\nQwen/Qwen3-Coder-480B-A35B-Instruct'}
