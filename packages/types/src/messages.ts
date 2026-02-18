@@ -27,6 +27,7 @@ export interface PingMessage extends MessageMeta {
 // 前端 -> 扩展：发起聊天请求
 export interface ChatSendMessage extends MessageMeta {
   type: 'chat.send' // 消息类型
+  requestId: string // 请求 ID（类型层必填）
   payload: {
     sessionId: string // 会话 ID，由前端生成或从历史会话恢复
     text: string // 用户输入的原始文本

@@ -81,7 +81,17 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     setSending,
     setInlineNotice,
   } = useThreadComposerActions()
-  const { appendUserMessage, appendAssistantDelta, completeAssistantMessage, setAssistantError } = useThreadSessionActions()
+  const {
+    appendUserMessage,
+    appendAssistantDelta,
+    completeAssistantMessage,
+    setAssistantError,
+    beginAssistantRequest,
+    getActiveAssistantRequestId,
+    isActiveAssistantRequest,
+    endAssistantRequest,
+    setSessionProtocolError,
+  } = useThreadSessionActions()
 
   const contextFiles: ContextFileItem[] = attachments.map(file => ({
     id: file.path,
@@ -123,17 +133,22 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
 
   useEffect(() => {
     const dispose = bridge.onMessage(message => {
+      handleThreadSessionMessage(message, {
+        appendAssistantDelta,
+        completeAssistantMessage,
+        setAssistantError,
+        isActiveAssistantRequest,
+        setSessionProtocolError,
+      })
       handleThreadExtensionMessage(message, {
         addPickedFiles,
         consumePendingContextPickSession,
         clearAttachments,
         setSending,
         setInlineNotice,
-      })
-      handleThreadSessionMessage(message, {
-        appendAssistantDelta,
-        completeAssistantMessage,
-        setAssistantError,
+        getActiveAssistantRequestId,
+        isActiveAssistantRequest,
+        endAssistantRequest,
       })
     })
 
@@ -141,6 +156,9 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }, [
     addPickedFiles,
     appendAssistantDelta,
+    endAssistantRequest,
+    getActiveAssistantRequestId,
+    isActiveAssistantRequest,
     clearAttachments,
     completeAssistantMessage,
     consumePendingContextPickSession,
@@ -184,11 +202,14 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
       }
       return
     }
+    const requestId = crypto.randomUUID()
     setInlineNotice(null)
+    beginAssistantRequest(sessionId, requestId)
     setSending(sessionId, true)
     appendUserMessage(sessionId, text)
     bridge.send(
       buildChatSendMessage({
+        requestId,
         sessionId,
         text,
         model,

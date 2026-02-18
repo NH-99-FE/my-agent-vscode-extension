@@ -1,8 +1,10 @@
 import type { ChatAttachment, ExtensionToWebviewMessage, WebviewToExtensionMessage, ReasoningLevel } from '@agent/types'
 import { CONTEXT_FILES_LIMIT_NOTICE, MAX_CONTEXT_FILES } from '../store/threadComposerStore'
+import { resolveStreamGate, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR } from './streamRequestGuard'
 
 // 发送聊天消息的输入参数
 type SendChatInput = {
+  requestId: string // 本次发送请求 ID（用于流式回包关联）
   sessionId: string // 请求关联的会话 ID
   text: string // 用户输入文本
   model: string // 目标模型 ID
@@ -17,6 +19,9 @@ type ThreadMessageActions = {
   clearAttachments: (targetSessionId?: string) => void // 清空附件（仅成功完成时调用）
   setSending: (targetSessionId: string, isSending: boolean) => void // 更新发送态
   setInlineNotice: (message: string | null, targetSessionId?: string) => void // 更新内联提示
+  getActiveAssistantRequestId: (sessionId: string) => string | undefined // 获取会话 active requestId
+  isActiveAssistantRequest: (sessionId: string, requestId?: string) => boolean // 判断 requestId 是否命中 active 请求
+  endAssistantRequest: (sessionId: string, requestId: string) => void // 仅匹配时结束 active 请求
 }
 
 /**
@@ -28,6 +33,7 @@ type ThreadMessageActions = {
 export function buildChatSendMessage(input: SendChatInput): WebviewToExtensionMessage {
   return {
     type: 'chat.send',
+    requestId: input.requestId,
     payload: {
       sessionId: input.sessionId,
       text: input.text,
@@ -71,16 +77,68 @@ export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage,
       actions.addPickedFiles(message.payload.files, targetSessionId)
       return
     }
+    case 'chat.delta': {
+      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
+      if (gate !== 'missing_with_active') {
+        return
+      }
+      const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
+      if (activeRequestId === undefined) {
+        return
+      }
+      actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+      actions.setSending(message.payload.sessionId, false)
+      actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+      return
+    }
     case 'chat.done': {
+      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
+      if (gate === 'ignore') {
+        return
+      }
+      if (gate === 'missing_with_active') {
+        const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
+        if (activeRequestId === undefined) {
+          return
+        }
+        actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+        actions.setSending(message.payload.sessionId, false)
+        actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+        return
+      }
+
       actions.setSending(message.payload.sessionId, false)
       if (message.payload.finishReason === 'stop' || message.payload.finishReason === 'length') {
         actions.clearAttachments(message.payload.sessionId)
       }
+      const requestId = message.requestId
+      if (requestId !== undefined) {
+        actions.endAssistantRequest(message.payload.sessionId, requestId)
+      }
       return
     }
     case 'chat.error': {
+      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
+      if (gate === 'ignore') {
+        return
+      }
+      if (gate === 'missing_with_active') {
+        const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
+        if (activeRequestId === undefined) {
+          return
+        }
+        actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+        actions.setSending(message.payload.sessionId, false)
+        actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+        return
+      }
+
       actions.setSending(message.payload.sessionId, false)
       actions.setInlineNotice(message.payload.message, message.payload.sessionId)
+      const requestId = message.requestId
+      if (requestId !== undefined) {
+        actions.endAssistantRequest(message.payload.sessionId, requestId)
+      }
       return
     }
     default: {

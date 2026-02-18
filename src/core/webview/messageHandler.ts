@@ -381,6 +381,10 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
         return undefined
       }
+      // chat.send 要求 requestId 运行时必填，确保流式回包可做请求级防串。
+      if (typeof maybeMessage.requestId !== 'string') {
+        return undefined
+      }
       const payload = maybeMessage.payload as Record<string, unknown>
       const sessionId = asNonEmptyString(payload.sessionId)
       const text = asString(payload.text)
@@ -393,7 +397,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
 
       const chatSendMessage: WebviewToExtensionMessage = {
         type: 'chat.send',
-        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+        requestId: maybeMessage.requestId,
         payload: {
           sessionId,
           text,

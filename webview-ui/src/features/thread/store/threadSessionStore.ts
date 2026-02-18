@@ -29,16 +29,22 @@ type ThreadSessionState = {
 type ThreadSessionStoreState = {
   sessionsById: Record<string, ThreadSessionState> // 按 sessionId 维护会话消息，避免跨会话串数据
   activeAssistantMessageIdBySession: Record<string, string | undefined> // 当前正在流式输出的助手消息 id（按会话隔离）
+  activeRequestIdBySession: Record<string, string | undefined> // 当前进行中的助手请求 requestId（按会话隔离）
 }
 
 // 会话存储操作方法，负责消息的写入、流式增量拼接、完成/错误状态更新
 type ThreadSessionStoreActions = {
   ensureSession: (sessionId: string) => void // 确保会话已初始化（无消息时也创建空壳）
+  beginAssistantRequest: (sessionId: string, requestId: string) => void // 标记会话当前活跃请求
+  getActiveAssistantRequestId: (sessionId: string) => string | undefined // 读取会话当前活跃请求 ID
+  isActiveAssistantRequest: (sessionId: string, requestId?: string) => boolean // 判断 requestId 是否命中当前活跃请求
+  endAssistantRequest: (sessionId: string, requestId: string) => void // 仅在 requestId 匹配时结束活跃请求
   appendUserMessage: (sessionId: string, text: string) => void // 追加用户消息（发送时写入）
   appendAssistantDelta: (sessionId: string, textDelta: string) => void // 消费 chat.delta，将增量拼接到助手消息
   completeAssistantMessage: (sessionId: string, finishReason: ThreadFinishReason) => void // 消费 chat.done，更新助手消息结束态
   setAssistantError: (sessionId: string, errorMessage: string) => void // 消费 chat.error，标记助手消息错误
   setSessionError: (sessionId: string, error: string | null) => void // 设置会话级错误（用于详情页错误提示）
+  setSessionProtocolError: (sessionId: string, message: string) => void // 设置协议级错误（可见错误）
 }
 
 type ThreadSessionStore = ThreadSessionStoreState & { actions: ThreadSessionStoreActions }
@@ -152,9 +158,10 @@ function markAssistantStreamError(message: ThreadMessageItem, errorMessage: stri
   }
 }
 
-const useThreadSessionStore = create<ThreadSessionStore>(set => ({
+const useThreadSessionStore = create<ThreadSessionStore>((set, get) => ({
   sessionsById: {},
   activeAssistantMessageIdBySession: {},
+  activeRequestIdBySession: {},
   actions: {
     /** 确保会话存在，若不存在则初始化空会话 */
     ensureSession: sessionId => {
@@ -164,6 +171,57 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
       set(state => ({
         sessionsById: ensureSessionRecord(state.sessionsById, sessionId),
       }))
+    },
+    /** 开始一个新的助手请求，按 sessionId 记录 active requestId */
+    beginAssistantRequest: (sessionId, requestId) => {
+      if (!isValidSessionId(sessionId) || requestId.trim().length === 0) {
+        return
+      }
+      set(state => ({
+        activeRequestIdBySession: {
+          ...state.activeRequestIdBySession,
+          [sessionId]: requestId,
+        },
+      }))
+    },
+    /** 获取会话当前 active requestId */
+    getActiveAssistantRequestId: sessionId => {
+      if (!isValidSessionId(sessionId)) {
+        return undefined
+      }
+      return get().activeRequestIdBySession[sessionId]
+    },
+    /** 判断给定 requestId 是否命中当前活跃请求；requestId 缺省时判断是否存在 active 请求 */
+    isActiveAssistantRequest: (sessionId, requestId) => {
+      if (!isValidSessionId(sessionId)) {
+        return false
+      }
+      const activeRequestId = get().activeRequestIdBySession[sessionId]
+      if (activeRequestId === undefined) {
+        return false
+      }
+      if (requestId === undefined) {
+        return true
+      }
+      return activeRequestId === requestId
+    },
+    /** 结束助手请求：仅当 requestId 与当前 active 一致时才清理 */
+    endAssistantRequest: (sessionId, requestId) => {
+      if (!isValidSessionId(sessionId) || requestId.trim().length === 0) {
+        return
+      }
+      set(state => {
+        const activeRequestId = state.activeRequestIdBySession[sessionId]
+        if (activeRequestId !== requestId) {
+          return {}
+        }
+
+        const nextActiveRequestIdBySession = { ...state.activeRequestIdBySession }
+        delete nextActiveRequestIdBySession[sessionId]
+        return {
+          activeRequestIdBySession: nextActiveRequestIdBySession,
+        }
+      })
     },
     /** 追加用户消息，写入后清空会话级错误 */
     appendUserMessage: (sessionId, text) => {
@@ -346,6 +404,67 @@ const useThreadSessionStore = create<ThreadSessionStore>(set => ({
             ...sessionsById,
             [sessionId]: nextSession,
           },
+        }
+      })
+    },
+    /** 设置协议错误：写入会话级错误；若存在流式中的助手消息则将其标记为错误态 */
+    setSessionProtocolError: (sessionId, message) => {
+      const normalizedMessage = message.trim()
+      if (!isValidSessionId(sessionId) || normalizedMessage.length === 0) {
+        return
+      }
+
+      set(state => {
+        const sessionsById = ensureSessionRecord(state.sessionsById, sessionId)
+        const session = getSessionState(sessionsById, sessionId)
+        const activeAssistantMessageId = state.activeAssistantMessageIdBySession[sessionId]
+
+        if (!activeAssistantMessageId) {
+          return {
+            sessionsById: {
+              ...sessionsById,
+              [sessionId]: {
+                ...session,
+                error: normalizedMessage,
+              },
+            },
+          }
+        }
+
+        let found = false
+        const messages: ThreadMessageItem[] = session.messages.map(messageItem => {
+          if (messageItem.id !== activeAssistantMessageId) {
+            return messageItem
+          }
+          found = true
+          return markAssistantStreamError(messageItem, normalizedMessage)
+        })
+
+        if (!found) {
+          return {
+            sessionsById: {
+              ...sessionsById,
+              [sessionId]: {
+                ...session,
+                error: normalizedMessage,
+              },
+            },
+          }
+        }
+
+        const nextActiveBySession = { ...state.activeAssistantMessageIdBySession }
+        delete nextActiveBySession[sessionId]
+
+        return {
+          sessionsById: {
+            ...sessionsById,
+            [sessionId]: {
+              ...session,
+              error: normalizedMessage,
+              messages,
+            },
+          },
+          activeAssistantMessageIdBySession: nextActiveBySession,
         }
       })
     },
