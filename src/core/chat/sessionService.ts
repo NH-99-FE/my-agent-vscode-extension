@@ -8,6 +8,10 @@ export class SessionService {
     await this.sessionStore.createSession(sessionId)
     return { sessionId }
   }
+
+  async getSessions() {
+    return this.sessionStore.getSessions()
+  }
 }
 
 function createSessionId(): string {

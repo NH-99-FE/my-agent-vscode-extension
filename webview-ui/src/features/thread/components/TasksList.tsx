@@ -4,16 +4,29 @@ import { HoverCancelConfirm } from './HoverCancelConfirm'
 
 type TaskItem = {
   id: string
-  content: string
-  time: string
+  title: string
+  updatedAt: number
 }
+
 type TaskListProps = {
   tasks: TaskItem[]
   /** 点击“查看全部”回调，由父组件决定展示历史搜索卡片。 */
   onViewAllClick?: () => void
+  /** 点击任务项回调 */
+  onItemClick?: (id: string) => void
 }
 
-export const TaskList = ({ tasks, onViewAllClick }: TaskListProps) => {
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  return date.toLocaleDateString()
+}
+
+export const TaskList = ({ tasks, onViewAllClick, onItemClick }: TaskListProps) => {
   // 当前鼠标悬停的任务 id：用于切换右侧显示（time <-> 删除入口）。
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   // 当前处于“确认删除”态的任务 id：保证同一时刻只确认一个任务。
@@ -31,10 +44,11 @@ export const TaskList = ({ tasks, onViewAllClick }: TaskListProps) => {
             setHoveredId(current => (current === item.id ? null : current))
             setConfirmingId(current => (current === item.id ? null : current))
           }}
+          onClick={() => onItemClick?.(item.id)}
         >
           <div className="flex h-5 min-w-0 items-center justify-between">
             {/* task内容 */}
-            <div className="min-w-0 flex-1 truncate">{item.content}</div>
+            <div className="min-w-0 flex-1 truncate">{item.title}</div>
             {/* 右侧：时间/hover删除 */}
             <div className="flex min-w-16 shrink-0 items-center justify-end">
               {hoveredId === item.id ? (
@@ -48,7 +62,7 @@ export const TaskList = ({ tasks, onViewAllClick }: TaskListProps) => {
                   }}
                 />
               ) : (
-                <span className="text-xs text-muted-foreground">{item.time}</span>
+                <span className="text-xs text-muted-foreground">{formatTime(item.updatedAt)}</span>
               )}
             </div>
           </div>
@@ -59,7 +73,7 @@ export const TaskList = ({ tasks, onViewAllClick }: TaskListProps) => {
         onClick={onViewAllClick}
         className="mt-1 cursor-pointer px-1.5 text-sm text-accent-foreground/70 transition-colors duration-200 hover:text-accent-foreground"
       >
-        查看全部{'（50个）'}
+        查看全部
       </span>
     </div>
   )

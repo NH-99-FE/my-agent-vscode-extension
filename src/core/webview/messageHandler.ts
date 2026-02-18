@@ -77,6 +77,9 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
         case 'chat.session.create':
           await handleChatSessionCreate(panel, parsedMessage, sessionService)
           break
+        case 'chat.history.get':
+          await handleChatHistoryGet(panel, parsedMessage, sessionService)
+          break
       }
     } catch (error) {
       await postSystemError(panel, toErrorMessage(error), parsedMessage.requestId)
@@ -302,6 +305,27 @@ async function handleChatSessionCreate(
   })
 }
 
+async function handleChatHistoryGet(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'chat.history.get' }>,
+  sessionService: SessionService
+): Promise<void> {
+  const sessions = await sessionService.getSessions()
+  const historyList = sessions.map(session => ({
+    id: session.id,
+    title: session.title,
+    updatedAt: session.updatedAt,
+  }))
+
+  await postTypedMessage(panel, {
+    type: 'chat.history.list',
+    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    payload: {
+      sessions: historyList,
+    },
+  })
+}
+
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
@@ -506,6 +530,17 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
         ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
       }
       return sessionCreateMessage
+    }
+    case 'chat.history.get': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+
+      const chatHistoryGetMessage: WebviewToExtensionMessage = {
+        type: 'chat.history.get',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return chatHistoryGetMessage
     }
     default:
       return undefined

@@ -52,6 +52,7 @@ type ThreadWorkspaceActions = {
   clearSettingsApiKeyInput: () => void // 清空 API Key 输入
   upsertThreadHistory: (item: ThreadHistoryItem) => void // 新增或更新历史项（同 sessionId 去重并刷新排序）
   removeThreadHistory: (sessionId: string) => void // 删除单条历史项
+  setThreadHistory: (items: ThreadHistoryItem[]) => void // 全量设置历史项
 }
 
 type ThreadWorkspaceStore = ThreadWorkspaceState & { actions: ThreadWorkspaceActions }
@@ -271,6 +272,19 @@ const useThreadWorkspaceStore = create<ThreadWorkspaceStore>((set, get) => ({
       set(state => ({
         threadHistory: state.threadHistory.filter(item => item.sessionId !== normalizedSessionId),
       }))
+    },
+    /** 全量设置历史项，用于初始化或全量刷新 */
+    setThreadHistory: items => {
+      const nextHistory = items
+        .map(item => ({
+          sessionId: item.sessionId.trim(),
+          title: item.title.trim() || '新会话',
+          updatedAt: item.updatedAt,
+        }))
+        .filter(item => item.sessionId)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+
+      set({ threadHistory: nextHistory })
     },
   },
 }))

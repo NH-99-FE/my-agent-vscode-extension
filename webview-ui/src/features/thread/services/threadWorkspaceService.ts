@@ -6,6 +6,7 @@ type ThreadWorkspaceMessageActions = {
   onSettingsState: (snapshot: SettingsStateMessage['payload'], requestId?: string) => void // 处理设置状态更新
   onSystemError: (message: string, requestId?: string) => void // 处理系统错误
   onSessionCreated: (sessionId: string) => void // 处理会话创建完成
+  onHistoryList: (sessions: Array<{ id: string; title: string; updatedAt: number }>) => void // 处理历史列表更新
 }
 
 // 历史标题最大长度
@@ -121,6 +122,18 @@ export function buildSettingsApiKeyDeleteMessage(requestId: string): WebviewToEx
 }
 
 /**
+ * 构建获取历史记录消息
+ * @param requestId 请求 ID
+ * @returns 获取历史记录消息对象
+ */
+export function buildChatHistoryGetMessage(requestId: string): WebviewToExtensionMessage {
+  return {
+    type: 'chat.history.get',
+    requestId,
+  }
+}
+
+/**
  * 处理线程工作区消息
  * @param message 扩展发送的消息
  * @param actions 线程工作区消息操作接口
@@ -139,6 +152,10 @@ export function handleThreadWorkspaceMessage(message: ExtensionToWebviewMessage,
     case 'system.error': {
       actions.finishCreateSession()
       actions.onSystemError(message.payload.message, message.requestId)
+      return
+    }
+    case 'chat.history.list': {
+      actions.onHistoryList(message.payload.sessions)
       return
     }
     default: {

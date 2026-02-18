@@ -14,9 +14,19 @@ type TopBarProps = {
   onNewChatClick?: () => void
   /** 创建新会话时禁用重复点击。 */
   creatingSession?: boolean
+  /** 详情页标题 */
+  title?: string
 }
 
-export const TopBar = ({ mode, onBackClick, onHistoryClick, onSettingsClick, onNewChatClick, creatingSession = false }: TopBarProps) => {
+export const TopBar = ({
+  mode,
+  onBackClick,
+  onHistoryClick,
+  onSettingsClick,
+  onNewChatClick,
+  creatingSession = false,
+  title,
+}: TopBarProps) => {
   return (
     <div className="flex h-8 w-full items-center justify-between gap-4 overflow-hidden px-2.5">
       {mode === 'thread' ? (
@@ -30,7 +40,7 @@ export const TopBar = ({ mode, onBackClick, onHistoryClick, onSettingsClick, onN
               </button>
             </IconTooltip>
           </div>
-          <span className="min-w-0 flex-1 truncate">你好你好你好你好你好你好你好你好你好你好你好你好</span>
+          <span className="min-w-0 flex-1 truncate">{title}</span>
         </div>
       )}
       <div className="ml-auto flex items-center gap-2">

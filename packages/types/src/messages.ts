@@ -86,18 +86,6 @@ export interface ChatSessionCreateMessage extends MessageMeta {
   type: 'chat.session.create' // 消息类型
 }
 
-// Webview 发给扩展的所有入站消息联合类型
-export type WebviewToExtensionMessage =
-  | PingMessage
-  | ChatSendMessage
-  | ChatCancelMessage
-  | ContextFilesPickMessage
-  | SettingsGetMessage
-  | SettingsUpdateMessage
-  | SettingsApiKeySetMessage
-  | SettingsApiKeyDeleteMessage
-  | ChatSessionCreateMessage
-
 // 扩展 -> 前端：ping 的响应消息
 export interface PongMessage extends MessageMeta {
   type: 'pong' // 消息类型
@@ -180,6 +168,23 @@ export interface ChatSessionCreatedMessage extends MessageMeta {
   }
 }
 
+// 前端 -> 扩展：获取会话列表
+export interface ChatHistoryGetMessage extends MessageMeta {
+  type: 'chat.history.get' // 消息类型
+}
+
+// 扩展 -> 前端：会话列表回包
+export interface ChatHistoryListMessage extends MessageMeta {
+  type: 'chat.history.list' // 消息类型
+  payload: {
+    sessions: Array<{
+      id: string // 会话 ID
+      title: string // 会话标题
+      updatedAt: number // 更新时间戳
+    }>
+  }
+}
+
 // 扩展发给 Webview 的所有出站消息联合类型
 export type ExtensionToWebviewMessage =
   | PongMessage
@@ -191,3 +196,17 @@ export type ExtensionToWebviewMessage =
   | ContextFilesPickedMessage
   | SettingsStateMessage
   | ChatSessionCreatedMessage
+  | ChatHistoryListMessage
+
+// Webview 发给扩展的所有入站消息联合类型
+export type WebviewToExtensionMessage =
+  | PingMessage
+  | ChatSendMessage
+  | ChatCancelMessage
+  | ContextFilesPickMessage
+  | SettingsGetMessage
+  | SettingsUpdateMessage
+  | SettingsApiKeySetMessage
+  | SettingsApiKeyDeleteMessage
+  | ChatSessionCreateMessage
+  | ChatHistoryGetMessage

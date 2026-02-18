@@ -7,6 +7,7 @@ import { SettingsPanel } from '@/features/thread/components/SettingsPanel'
 import { bridge } from '@/lib/bridge'
 import {
   buildHistoryTitleFromMessages,
+  buildChatHistoryGetMessage,
   buildCreateSessionMessage,
   buildSettingsApiKeyDeleteMessage,
   buildSettingsApiKeySetMessage,
@@ -70,6 +71,7 @@ export function WorkspaceLayout() {
     setSettingsApiKeyInput,
     clearSettingsApiKeyInput,
     upsertThreadHistory,
+    setThreadHistory,
   } = useThreadWorkspaceActions()
 
   const trackSettingsRequest = useCallback((requestId: string): void => {
@@ -104,6 +106,10 @@ export function WorkspaceLayout() {
     bridge.send(buildSettingsGetMessage(requestId))
   }, [beginSettingsLoad, trackSettingsRequest])
 
+  const requestHistory = useCallback(() => {
+    bridge.send(buildChatHistoryGetMessage(crypto.randomUUID()))
+  }, [])
+
   const saveSettings = useCallback(() => {
     const normalizedModels = parseModelsText(settingsModelsText)
     const normalizedDefaultModel = settingsDefaultModel.trim()
@@ -117,13 +123,7 @@ export function WorkspaceLayout() {
     markPendingSettingsMutation(requestId)
     beginSettingsSave()
     bridge.send(
-      buildSettingsUpdateMessage(
-        requestId,
-        settingsProviderDefault,
-        settingsOpenaiBaseUrl,
-        normalizedDefaultModel,
-        normalizedModels,
-      ),
+      buildSettingsUpdateMessage(requestId, settingsProviderDefault, settingsOpenaiBaseUrl, normalizedDefaultModel, normalizedModels)
     )
 
     const normalizedApiKey = settingsApiKeyInput.trim()
@@ -159,7 +159,14 @@ export function WorkspaceLayout() {
     beginSettingsSave()
     bridge.send(buildSettingsApiKeySetMessage(requestId, normalizedApiKey))
     clearSettingsApiKeyInput()
-  }, [beginSettingsSave, clearSettingsApiKeyInput, markPendingSettingsMutation, setSettingsError, settingsApiKeyInput, trackSettingsRequest])
+  }, [
+    beginSettingsSave,
+    clearSettingsApiKeyInput,
+    markPendingSettingsMutation,
+    setSettingsError,
+    settingsApiKeyInput,
+    trackSettingsRequest,
+  ])
 
   const deleteApiKey = useCallback(() => {
     const requestId = crypto.randomUUID()
@@ -189,6 +196,10 @@ export function WorkspaceLayout() {
   }, [currentThreadMessages, navigate, setSettingsOpen, threadId, upsertThreadHistory])
 
   useEffect(() => {
+    // 初始化请求设置和历史
+    requestSettings()
+    requestHistory()
+
     const dispose = bridge.onMessage(message => {
       handleThreadWorkspaceMessage(message, {
         finishCreateSession,
@@ -211,16 +222,38 @@ export function WorkspaceLayout() {
         onSessionCreated: sessionId => {
           navigate(`/${sessionId}`)
         },
+        onHistoryList: sessions => {
+          setThreadHistory(
+            sessions.map(s => ({
+              sessionId: s.id,
+              title: s.title,
+              updatedAt: s.updatedAt,
+            }))
+          )
+        },
       })
     })
 
     return dispose
-  }, [applySettingsSnapshot, finishCreateSession, navigate, requestSettings, setSettingsError, shouldApplySettingsResponse])
+  }, [
+    applySettingsSnapshot,
+    finishCreateSession,
+    navigate,
+    requestHistory,
+    requestSettings,
+    setSettingsError,
+    setThreadHistory,
+    shouldApplySettingsResponse,
+  ])
+
+  // 计算当前会话标题
+  const currentSessionTitle = threadId ? (historyItems.find(item => item.sessionId === threadId)?.title ?? '新会话') : ''
 
   return (
     <div className="flex h-dvh flex-col">
       <TopBar
         mode={mode}
+        title={currentSessionTitle}
         onBackClick={handleBackToHomeFromDetail}
         creatingSession={isCreatingSession}
         onHistoryClick={() => {
