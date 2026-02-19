@@ -11,6 +11,7 @@ import { SessionStore } from '../storage/sessionStore'
 
 // 聊天服务请求参数
 export interface ChatServiceRequest {
+  requestId: string // 当前请求 ID（用于取消语义精确关联）
   sessionId: string // 会话 ID
   text: string // 用户输入文本
   model: string // 目标模型
@@ -57,7 +58,7 @@ export class ChatService {
    */
   async *streamChat(request: ChatServiceRequest, signal?: LlmCancellationSignal): AsyncGenerator<LlmStreamEvent> {
     // 先写入用户消息，保证会话时间线与真实请求顺序一致
-    await this.sessionStore.appendUserMessage(request.sessionId, request.text)
+    await this.sessionStore.appendUserMessage(request.sessionId, request.text, request.requestId)
 
     const editorContext = buildContextFromActiveEditor()
     const attachmentContext = await buildAttachmentContext(request.attachments)
@@ -104,6 +105,7 @@ export class ChatService {
       }
     } catch (error) {
       if (error instanceof LlmAbortError) {
+        await this.markUserTurnCancelled(request.sessionId, request.requestId)
         await this.sessionStore.setLastAssistantFinishReason(request.sessionId, 'cancelled')
         throw error
       }
@@ -124,6 +126,10 @@ export class ChatService {
 
       throw error instanceof Error ? error : new Error(errorMessage)
     }
+  }
+
+  async markUserTurnCancelled(sessionId: string, requestId: string): Promise<void> {
+    await this.sessionStore.markUserMessageCancelled(sessionId, requestId)
   }
 }
 
@@ -333,6 +339,9 @@ async function buildLlmMessagesForCurrentTurn(
 
 function shouldIncludeInContext(message: ChatMessage): message is ChatMessage & { role: 'user' | 'assistant' } {
   if (message.role === 'user') {
+    if (message.state === 'cancelled') {
+      return false
+    }
     return true
   }
 

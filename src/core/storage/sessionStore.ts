@@ -68,7 +68,7 @@ export class SessionStore {
     return created
   }
 
-  async appendUserMessage(sessionId: string, content: string): Promise<ChatSession> {
+  async appendUserMessage(sessionId: string, content: string, requestId?: string): Promise<ChatSession> {
     const now = Date.now()
     const sessions = await this.getSessions()
     const { session, nextSessions } = getOrCreateSession(sessions, sessionId, content, now)
@@ -77,11 +77,46 @@ export class SessionStore {
       role: 'user',
       content,
       timestamp: now,
+      ...(requestId ? { requestId } : {}),
+      state: 'normal',
     })
     session.updatedAt = now
 
     await this.saveSessions(nextSessions)
     await this.setActiveSessionId(sessionId)
+    return session
+  }
+
+  async markUserMessageCancelled(sessionId: string, requestId: string): Promise<ChatSession | undefined> {
+    const now = Date.now()
+    const sessions = await this.getSessions()
+    const session = sessions.find(item => item.id === sessionId)
+    if (!session) {
+      return undefined
+    }
+    const normalizedRequestId = requestId.trim()
+    if (!normalizedRequestId) {
+      return session
+    }
+
+    for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+      const message = session.messages[index]
+      if (!message || message.role !== 'user') {
+        continue
+      }
+      if (message.requestId !== normalizedRequestId) {
+        continue
+      }
+      if (message.state === 'cancelled') {
+        return session
+      }
+
+      message.state = 'cancelled'
+      message.timestamp = now
+      session.updatedAt = now
+      await this.saveSessions(sessions)
+      return session
+    }
     return session
   }
 

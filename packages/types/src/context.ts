@@ -24,10 +24,14 @@ export interface BuiltContext {
 }
 
 // 单条聊天消息结构
+export type ChatMessageState = 'normal' | 'cancelled'
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool' // 消息角色
   content: string // 消息内容
   timestamp: number // Unix 毫秒时间戳
+  requestId?: string // 请求 ID（用于将 user turn 与取消请求精确关联）
+  state?: ChatMessageState // 消息状态（当前用于 user：normal/cancelled）
   finishReason?: 'stop' | 'length' | 'cancelled' | 'error' // assistant 结束原因（用于上下文过滤）
 }
 

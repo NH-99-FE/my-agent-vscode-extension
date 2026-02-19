@@ -58,7 +58,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
           await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
           break
         case 'chat.cancel':
-          await handleChatCancel(parsedMessage, inFlightBySession)
+          await handleChatCancel(parsedMessage, chatService, inFlightBySession)
           break
         case 'context.files.pick':
           await handleContextFilesPick(panel, parsedMessage)
@@ -117,7 +117,13 @@ async function handleChatSend(
   })
 
   try {
-    const stream = chatService.streamChat(message.payload, controller.signal)
+    const stream = chatService.streamChat(
+      {
+        requestId: message.requestId,
+        ...message.payload,
+      },
+      controller.signal
+    )
 
     // 消费 LLM 流并映射到 Webview 协议事件。
     for await (const event of stream) {
@@ -200,6 +206,7 @@ async function handleChatSend(
 
 async function handleChatCancel(
   message: Extract<WebviewToExtensionMessage, { type: 'chat.cancel' }>,
+  chatService: ChatService,
   inFlightBySession: Map<string, InFlightRequest>
 ): Promise<void> {
   const inFlight = inFlightBySession.get(message.payload.sessionId)
@@ -214,6 +221,7 @@ async function handleChatCancel(
 
   // 取消后由上游 catch 统一转换为 done(cancelled) 响应。
   inFlight.controller.cancel('cancelled by user')
+  await chatService.markUserTurnCancelled(message.payload.sessionId, inFlight.requestId)
 }
 
 async function handleContextFilesPick(
