@@ -1,6 +1,7 @@
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import type { ThreadMessageItem } from '@/features/thread/store/threadSessionStore'
 import { AssistantMarkdown } from './AssistantMarkdown'
+import { MessageCopyButton } from './MessageCopyButton'
 
 const DEFAULT_ERROR_MESSAGE = '生成失败，请重试。'
 const MAX_SHORT_ERROR_LENGTH = 60
@@ -32,7 +33,7 @@ export function AssistantMessageBlock({ message }: AssistantMessageBlockProps) {
   const shouldRenderBodyText = message.text.trim().length > 0 && !hideBodyWhenPureError
 
   return (
-    <div className="mr-auto max-w-full text-foreground">
+    <div className="group mr-auto max-w-full text-foreground">
       {shouldRenderBodyText ? <AssistantMarkdown text={message.text} /> : null}
 
       {isStreaming ? (
@@ -48,6 +49,8 @@ export function AssistantMessageBlock({ message }: AssistantMessageBlockProps) {
           <span>{shortErrorText}</span>
         </div>
       ) : null}
+
+      <MessageCopyButton text={message.text} align="left" />
     </div>
   )
 }
