@@ -1,5 +1,6 @@
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import type { ThreadMessageItem } from '@/features/thread/store/threadSessionStore'
+import { AssistantMarkdown } from './AssistantMarkdown'
 
 const DEFAULT_ERROR_MESSAGE = '生成失败，请重试。'
 const MAX_SHORT_ERROR_LENGTH = 60
@@ -32,7 +33,7 @@ export function AssistantMessageBlock({ message }: AssistantMessageBlockProps) {
 
   return (
     <div className="mr-auto max-w-full text-foreground">
-      {shouldRenderBodyText ? <p className="text-sm leading-6 break-words whitespace-pre-wrap">{message.text}</p> : null}
+      {shouldRenderBodyText ? <AssistantMarkdown text={message.text} /> : null}
 
       {isStreaming ? (
         <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
