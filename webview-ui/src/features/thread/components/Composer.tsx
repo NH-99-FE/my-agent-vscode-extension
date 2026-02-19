@@ -22,7 +22,6 @@ import {
   useThreadComposerAttachments,
   useThreadComposerCanSend,
   useThreadComposerIsSending,
-  useThreadComposerInlineNotice,
   useThreadComposerModel,
   useThreadComposerReasoningLevel,
   useThreadComposerSessionId,
@@ -58,7 +57,6 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const model = useThreadComposerModel()
   const reasoningLevel = useThreadComposerReasoningLevel()
   const attachments = useThreadComposerAttachments()
-  const inlineNotice = useThreadComposerInlineNotice()
   const settingsDefaultModel = useSettingsDefaultModel()
   const settingsModelsText = useSettingsModelsText()
   const settingsModelOptions = useMemo(() => {
@@ -104,8 +102,6 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }))
   const remainingContextFiles = getContextFilesRemaining(attachments.length)
   const maxHeight = 200
-  const missingModelNotice = !model.trim() && (text.trim().length > 0 || attachments.length > 0) ? '请先在设置中配置默认模型' : null
-  const activeInlineNotice = missingModelNotice ?? inlineNotice
   const modelOptions = useMemo(
     () =>
       settingsModelOptions.map(modelId => ({
@@ -180,6 +176,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     consumePendingContextPickSession,
     setAssistantError,
     setInlineNotice,
+    setSessionProtocolError,
     setSending,
     streamDeltaBuffer,
   ])
@@ -263,9 +260,6 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         onInput={resizeTextarea}
         onChange={event => {
           setText(event.target.value)
-          if (inlineNotice && !missingModelNotice) {
-            setInlineNotice(null)
-          }
         }}
         placeholder="向Codex任意提问"
         className={`max-h-50 min-h-15 ${isOverflowing ? 'overflow-y-auto' : 'overflow-y-hidden'}`}
@@ -303,7 +297,6 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
           }}
         />
       </div>
-      {activeInlineNotice ? <p className="mt-1 px-1 text-xs text-destructive">{activeInlineNotice}</p> : null}
       <div className="absolute right-2 bottom-1.5">
         <IconTooltip tipText={isSending ? '暂停生成' : '发送消息'} hasBackground={true}>
           <button

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   useThreadSessionActions,
-  useThreadSessionError,
   useThreadSessionHasActiveRequest,
   useThreadSessionMessages,
 } from '@/features/thread/store/threadSessionStore'
@@ -21,9 +20,8 @@ export const ThreadDetailView = ({ threadId }: ThreadDetailViewProps) => {
   const normalizedThreadId = threadId?.trim() ?? ''
   const isValidThreadId = normalizedThreadId.length > 0
   const messages = useThreadSessionMessages(normalizedThreadId || undefined)
-  const sessionError = useThreadSessionError(normalizedThreadId || undefined)
   const hasActiveRequest = useThreadSessionHasActiveRequest(normalizedThreadId || undefined)
-  const { ensureSession, setSessionError } = useThreadSessionActions()
+  const { ensureSession } = useThreadSessionActions()
   const [nearBottomByThreadId, setNearBottomByThreadId] = useState<Record<string, boolean | null>>({})
   const jumpToLatestActionRef = useRef<(() => void) | null>(null)
 
@@ -31,13 +29,12 @@ export const ThreadDetailView = ({ threadId }: ThreadDetailViewProps) => {
     if (!isValidThreadId) {
       return
     }
-    // 路由切换到新会话时，确保会话容器存在并清理旧错误提示。
+    // 路由切换到新会话时，确保会话容器存在。
     ensureSession(normalizedThreadId)
-    setSessionError(normalizedThreadId, null)
-  }, [ensureSession, isValidThreadId, normalizedThreadId, setSessionError])
+  }, [ensureSession, isValidThreadId, normalizedThreadId])
 
   const isNearBottom = isValidThreadId ? (nearBottomByThreadId[normalizedThreadId] ?? null) : null
-  const isLoading = messages.length === 0 && !sessionError && hasActiveRequest
+  const isLoading = messages.length === 0 && hasActiveRequest
   const showJumpToLatest = messages.length > 0 && isNearBottom === false
 
   const handleBottomStateChange = useCallback(
@@ -89,12 +86,6 @@ export const ThreadDetailView = ({ threadId }: ThreadDetailViewProps) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col px-2 py-2">
-      {sessionError ? (
-        <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {sessionError}
-        </div>
-      ) : null}
-
       {isLoading ? (
         <div className="flex flex-1 flex-col gap-2 px-2 py-1">
           <Skeleton className="h-18 w-[72%] rounded-lg" />
