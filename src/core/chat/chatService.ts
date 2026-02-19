@@ -20,10 +20,15 @@ export interface ChatServiceRequest {
 
 // 聊天服务配置选项
 interface ChatServiceOptions {
-  timeoutMs?: number // 超时时间（毫秒）
+  idleTimeoutMs?: number // 空闲超时（毫秒）
+  hardTimeoutMs?: number // 硬超时（毫秒）
+  timeoutMs?: number // 兼容字段：映射为 hardTimeoutMs
   maxRetries?: number // 最大重试次数
   retryDelayMs?: number // 重试延迟（毫秒）
 }
+
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000
+const DEFAULT_HARD_TIMEOUT_MS = 15 * 60_000
 
 /**
  * 聊天服务类
@@ -76,7 +81,8 @@ export class ChatService {
         sessionId: request.sessionId,
         ...(openAiRequestOptions ?? {}),
         messages: llmMessages,
-        timeoutMs: this.options.timeoutMs ?? 30_000,
+        idleTimeoutMs: this.options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+        hardTimeoutMs: this.options.hardTimeoutMs ?? this.options.timeoutMs ?? DEFAULT_HARD_TIMEOUT_MS,
         maxRetries: this.options.maxRetries ?? 1,
         retryDelayMs: this.options.retryDelayMs ?? 200,
         ...(signal ? { signal } : {}),
@@ -302,9 +308,9 @@ async function buildLlmMessagesForCurrentTurn(
     }
 
     const historyMessages = session.messages.filter(shouldIncludeInContext).map<LlmChatMessage>(message => ({
-        role: message.role,
-        content: message.content,
-      }))
+      role: message.role,
+      content: message.content,
+    }))
 
     // appendUserMessage 已在本轮开始时写入 currentUserText，这里移除末尾那条原文防重复
     const lastHistoryMessage = historyMessages[historyMessages.length - 1]

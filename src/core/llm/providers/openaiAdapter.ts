@@ -1,5 +1,5 @@
 import type { LlmChatMessage, LlmStreamEvent, LlmStreamRequest } from '../client'
-import { assertNotCancelled } from '../cancellation'
+import { assertNotCancelled, HARD_TIMEOUT_REASON, IDLE_TIMEOUT_REASON } from '../cancellation'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError } from '../errors'
 import type { ProviderAdapter } from './types'
 
@@ -35,7 +35,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
     }
 
     const normalizedBaseUrl = normalizeBaseUrl(request.baseUrl)
-    const client = await createOpenAIClient(request.apiKey, request.timeoutMs, normalizedBaseUrl)
+    const client = await createOpenAIClient(request.apiKey, normalizedBaseUrl)
     const abortController = createAbortController()
     // 将扩展内部取消信号桥接到 OpenAI SDK 请求取消。
     const offCancel = request.signal?.onCancel(reason => {
@@ -81,7 +81,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
   }
 }
 
-async function createOpenAIClient(apiKey: string, timeoutMs?: number, baseUrl?: string): Promise<OpenAIClientLike> {
+async function createOpenAIClient(apiKey: string, baseUrl?: string): Promise<OpenAIClientLike> {
   try {
     // 用动态导入避免在扩展编译阶段耦合 SDK 类型细节。
     const moduleName: string = 'openai'
@@ -93,9 +93,6 @@ async function createOpenAIClient(apiKey: string, timeoutMs?: number, baseUrl?: 
     }
 
     const options: Record<string, unknown> = { apiKey }
-    if (typeof timeoutMs === 'number' && timeoutMs > 0) {
-      options.timeout = timeoutMs
-    }
     if (baseUrl) {
       options.baseURL = baseUrl
     }
@@ -201,8 +198,11 @@ function normalizeOpenAiError(error: unknown, cancelReason?: string): Error {
     return error
   }
 
-  if (cancelReason === '__timeout__') {
-    return new LlmTimeoutError('LLM request timed out.')
+  if (cancelReason === IDLE_TIMEOUT_REASON) {
+    return new LlmTimeoutError('LLM stream idle timed out.')
+  }
+  if (cancelReason === HARD_TIMEOUT_REASON || cancelReason === '__timeout__') {
+    return new LlmTimeoutError('LLM request exceeded max duration.')
   }
   if (cancelReason) {
     return new LlmAbortError(cancelReason)
@@ -242,7 +242,12 @@ function normalizeOpenAiError(error: unknown, cancelReason?: string): Error {
   }
 
   if (message.toLowerCase().includes('timeout')) {
-    return new LlmTimeoutError('LLM request timed out.')
+    return new LlmProviderError({
+      code: 'timeout',
+      provider: 'openai',
+      retryable: true,
+      message: 'OpenAI request timed out.',
+    })
   }
 
   if (message.toLowerCase().includes('network') || message.toLowerCase().includes('fetch')) {

@@ -1,7 +1,8 @@
 import type { ReasoningLevel } from '@agent/types'
 import {
   assertNotCancelled,
-  createTimeoutController,
+  HARD_TIMEOUT_REASON,
+  IDLE_TIMEOUT_REASON,
   mergeSignals,
   sleep,
   type LlmCancellationSignal,
@@ -32,7 +33,9 @@ export interface LlmStreamRequest {
   apiKey?: string // Provider 访问密钥（按 provider 决定是否必填）
   baseUrl?: string // OpenAI 兼容网关基础地址（可选）
   temperature?: number // 温度参数
-  timeoutMs?: number // 超时时间（毫秒）
+  idleTimeoutMs?: number // 空闲超时（毫秒）：长时间无增量时超时
+  hardTimeoutMs?: number // 硬超时（毫秒）：整次请求最大持续时长
+  timeoutMs?: number // 兼容字段：映射为 hardTimeoutMs
   maxRetries?: number // 最大重试次数
   retryDelayMs?: number // 重试延迟（毫秒）
   signal?: LlmCancellationSignal // 取消信号
@@ -81,11 +84,20 @@ class DefaultLlmClient implements LlmClient {
     const adapter = this.providerRegistry.getAdapter(request.provider, request.model)
     const maxRetries = request.maxRetries ?? 1
     const retryDelayMs = request.retryDelayMs ?? 250
+    const hardTimeoutMs = request.hardTimeoutMs ?? request.timeoutMs
+    const idleTimeoutMs = request.idleTimeoutMs
+    let hasStreamedTextDelta = false
 
-    // 重试策略：首次 + maxRetries 次，取消/超时/不可重试错误直接中断。
+    // 重试策略：首次 + maxRetries 次。若已产生过增量，后续错误不再重试，避免重复输出污染。
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      const timeoutController = createTimeoutController(request.timeoutMs)
-      const mergedSignal = mergeSignals(request.signal, timeoutController.signal)
+      const hardTimeoutController = new LlmCancellationController()
+      const idleTimeoutController = new LlmCancellationController()
+      const hardTimer = createTimerHandle(hardTimeoutController, hardTimeoutMs, HARD_TIMEOUT_REASON)
+      const idleTimer = createTimerHandle(idleTimeoutController, idleTimeoutMs, IDLE_TIMEOUT_REASON)
+      hardTimer.arm()
+      idleTimer.arm()
+
+      const mergedSignal = mergeSignals(request.signal, hardTimeoutController.signal, idleTimeoutController.signal)
 
       try {
         const nextRequest: LlmStreamRequest = {
@@ -96,6 +108,10 @@ class DefaultLlmClient implements LlmClient {
         // 在进入 provider 前做一次前置取消检查，避免无意义出站请求。
         assertNotCancelled(nextRequest.signal)
         for await (const event of adapter.streamChat(nextRequest)) {
+          if (event.type === 'text-delta') {
+            hasStreamedTextDelta = true
+            idleTimer.arm()
+          }
           yield event
         }
         return
@@ -109,6 +125,10 @@ class DefaultLlmClient implements LlmClient {
           throw error
         }
 
+        if (hasStreamedTextDelta) {
+          throw error
+        }
+
         const isLastAttempt = attempt >= maxRetries
         if (isLastAttempt) {
           throw error
@@ -116,10 +136,48 @@ class DefaultLlmClient implements LlmClient {
 
         await sleep(retryDelayMs, request.signal)
       } finally {
-        timeoutController.cancel('dispose')
+        hardTimer.dispose()
+        idleTimer.dispose()
+        hardTimeoutController.cancel('dispose')
+        idleTimeoutController.cancel('dispose')
       }
     }
   }
+}
+
+function createTimerHandle(
+  controller: LlmCancellationController,
+  timeoutMs: number | undefined,
+  reason: string
+): {
+  arm: () => void
+  dispose: () => void
+} {
+  let handle: ReturnType<typeof setTimeout> | undefined
+
+  const clear = () => {
+    if (handle === undefined) {
+      return
+    }
+    clearTimeout(handle)
+    handle = undefined
+  }
+
+  const arm = () => {
+    if (typeof timeoutMs !== 'number' || timeoutMs <= 0 || controller.signal.aborted) {
+      return
+    }
+    clear()
+    handle = setTimeout(() => {
+      controller.cancel(reason)
+    }, timeoutMs)
+  }
+
+  const dispose = () => {
+    clear()
+  }
+
+  return { arm, dispose }
 }
 
 export { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmCancellationSignal, LlmCancellationController }

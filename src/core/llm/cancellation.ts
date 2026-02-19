@@ -54,16 +54,18 @@ export class LlmCancellationController {
 }
 
 // 内部超时原因码，仅在扩展内部使用。
-const TIMEOUT_REASON = '__timeout__'
+export const IDLE_TIMEOUT_REASON = '__idle_timeout__'
+export const HARD_TIMEOUT_REASON = '__hard_timeout__'
+const LEGACY_TIMEOUT_REASON = '__timeout__'
 
-export function createTimeoutController(timeoutMs?: number): LlmCancellationController {
+export function createTimeoutController(timeoutMs?: number, timeoutReason: string = HARD_TIMEOUT_REASON): LlmCancellationController {
   const controller = new LlmCancellationController()
   if (typeof timeoutMs !== 'number' || timeoutMs <= 0) {
     return controller
   }
 
   const handle = setTimeout(() => {
-    controller.cancel(TIMEOUT_REASON)
+    controller.cancel(timeoutReason)
   }, timeoutMs)
 
   controller.signal.onCancel(() => {
@@ -73,40 +75,53 @@ export function createTimeoutController(timeoutMs?: number): LlmCancellationCont
   return controller
 }
 
-export function mergeSignals(primary?: LlmCancellationSignal, secondary?: LlmCancellationSignal): LlmCancellationSignal | undefined {
-  if (!primary && !secondary) {
+export function mergeSignals(...signals: Array<LlmCancellationSignal | undefined>): LlmCancellationSignal | undefined {
+  const activeSignals = signals.filter((signal): signal is LlmCancellationSignal => Boolean(signal))
+  if (activeSignals.length === 0) {
     return undefined
   }
 
   const merged = new LlmCancellationController()
-  const offPrimary = primary?.onCancel(reason => {
-    merged.cancel(reason)
-  })
-  const offSecondary = secondary?.onCancel(reason => {
-    merged.cancel(reason)
-  })
+  const disposers = activeSignals.map(signal =>
+    signal.onCancel(reason => {
+      merged.cancel(reason)
+    })
+  )
 
-  if (primary?.aborted) {
-    merged.cancel(primary.reason)
-  }
-  if (secondary?.aborted) {
-    merged.cancel(secondary.reason)
+  for (const signal of activeSignals) {
+    if (!signal.aborted) {
+      continue
+    }
+    merged.cancel(signal.reason)
+    break
   }
 
   merged.signal.onCancel(() => {
-    offPrimary?.()
-    offSecondary?.()
+    for (const dispose of disposers) {
+      dispose()
+    }
   })
 
   return merged.signal
+}
+
+function toTimeoutMessage(reason: string | undefined): string | undefined {
+  if (reason === IDLE_TIMEOUT_REASON) {
+    return 'LLM stream idle timed out.'
+  }
+  if (reason === HARD_TIMEOUT_REASON || reason === LEGACY_TIMEOUT_REASON) {
+    return 'LLM request exceeded max duration.'
+  }
+  return undefined
 }
 
 export function assertNotCancelled(signal?: LlmCancellationSignal): void {
   if (!signal?.aborted) {
     return
   }
-  if (signal.reason === TIMEOUT_REASON) {
-    throw new LlmTimeoutError('LLM request timed out.')
+  const timeoutMessage = toTimeoutMessage(signal.reason)
+  if (timeoutMessage) {
+    throw new LlmTimeoutError(timeoutMessage)
   }
   throw new LlmAbortError(signal.reason ?? 'LLM request cancelled.')
 }
@@ -123,9 +138,15 @@ export async function sleep(ms: number, signal?: LlmCancellationSignal): Promise
       Math.max(0, ms)
     )
 
-    const offCancel = signal?.onCancel(reason => {
+    const offCancel = signal?.onCancel(() => {
       clearTimeout(handle)
-      reject(new LlmAbortError(reason ?? 'LLM request cancelled.'))
+      try {
+        assertNotCancelled(signal)
+      } catch (error) {
+        reject(error)
+        return
+      }
+      reject(new LlmAbortError('LLM request cancelled.'))
     })
   })
 }
