@@ -1,11 +1,11 @@
-import type { ChatAttachment, ChatMessage, ContextSnippet, ReasoningLevel } from '@agent/types'
+import type { ChatAttachment, ReasoningLevel } from '@agent/types'
 import * as vscode from 'vscode'
-import type { LlmCancellationSignal, LlmChatMessage, LlmClient, LlmStreamEvent } from '../llm/client'
+import type { LlmCancellationSignal, LlmClient, LlmStreamEvent } from '../llm/client'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmProvider } from '../llm/client'
-import type { AttachmentSnippet, SkippedAttachment } from '../context/attachmentContext'
 import { buildAttachmentContext } from '../context/attachmentContext'
 import { buildContextFromActiveEditor } from '../context/contextBuilder'
 import { createUnknownProviderError, formatLlmProviderError } from '../llm/errors'
+import { buildLlmMessagesForCurrentTurn } from '../prompt/promptService'
 import { getOpenAIApiKey, hasOpenAIApiKey } from '../storage/secrets'
 import { SessionStore } from '../storage/sessionStore'
 
@@ -62,13 +62,14 @@ export class ChatService {
 
     const editorContext = buildContextFromActiveEditor()
     const attachmentContext = await buildAttachmentContext(request.attachments)
-    const promptWithContext = composePromptWithContext(
-      request.text,
-      editorContext.snippets,
-      attachmentContext.snippets,
-      attachmentContext.skipped
-    )
-    const llmMessages = await buildLlmMessagesForCurrentTurn(this.sessionStore, request.sessionId, request.text, promptWithContext)
+    const llmMessages = await buildLlmMessagesForCurrentTurn({
+      sessionStore: this.sessionStore,
+      sessionId: request.sessionId,
+      currentUserText: request.text,
+      editorSnippets: editorContext.snippets,
+      attachmentSnippets: attachmentContext.snippets,
+      skippedAttachments: attachmentContext.skipped,
+    })
     let provider: LlmProvider = 'mock'
 
     try {
@@ -238,125 +239,4 @@ async function buildOpenAiRequestOptions(context: vscode.ExtensionContext): Prom
 function getOpenAiBaseUrlFromConfig(): string {
   const configured = vscode.workspace.getConfiguration('agent').get<string>('openai.baseUrl', '')
   return typeof configured === 'string' ? configured.trim() : ''
-}
-
-/**
- * 组合带上下文的提示词
- * @param userText 用户输入文本
- * @param editorSnippets 编辑器上下文片段
- * @param attachmentSnippets 附件上下文片段
- * @param skippedAttachments 跳过的附件
- * @returns 组合后的提示词
- */
-function composePromptWithContext(
-  userText: string,
-  editorSnippets: ContextSnippet[],
-  attachmentSnippets: AttachmentSnippet[],
-  skippedAttachments: SkippedAttachment[]
-): string {
-  if (editorSnippets.length === 0 && attachmentSnippets.length === 0 && skippedAttachments.length === 0) {
-    return userText
-  }
-
-  const sections: string[] = [`User request:\n${userText}`]
-
-  if (editorSnippets.length > 0) {
-    const editorBlock = editorSnippets
-      .map((snippet, index) => {
-        return [
-          `### Editor Context ${index + 1}`,
-          `source: ${snippet.source}`,
-          `file: ${snippet.filePath}`,
-          '```',
-          snippet.content,
-          '```',
-        ].join('\n')
-      })
-      .join('\n\n')
-    sections.push(`Editor context:\n${editorBlock}`)
-  }
-
-  if (attachmentSnippets.length > 0) {
-    const attachmentBlock = attachmentSnippets
-      .map((snippet, index) => {
-        return [`### Attachment ${index + 1}`, `name: ${snippet.name}`, `path: ${snippet.path}`, '```', snippet.content, '```'].join('\n')
-      })
-      .join('\n\n')
-    sections.push(`Attachment context:\n${attachmentBlock}`)
-  }
-
-  if (skippedAttachments.length > 0) {
-    const skippedBlock = skippedAttachments.map(item => `- ${item.name} (${item.path}): ${item.reason}`).join('\n')
-    sections.push(`Skipped attachments:\n${skippedBlock}`)
-  }
-
-  return sections.join('\n\n')
-}
-
-/**
- * 为当前轮次构建 LLM 消息
- * @param sessionStore 会话存储
- * @param sessionId 会话 ID
- * @param currentUserText 当前用户文本
- * @param currentPromptWithContext 当前带上下文的提示词
- * @returns LLM 消息数组
- */
-async function buildLlmMessagesForCurrentTurn(
-  sessionStore: SessionStore,
-  sessionId: string,
-  currentUserText: string,
-  currentPromptWithContext: string
-): Promise<LlmChatMessage[]> {
-  try {
-    const session = await sessionStore.getSessionById(sessionId)
-    if (!session || session.messages.length === 0) {
-      return [{ role: 'user', content: currentPromptWithContext }]
-    }
-
-    const historyMessages = session.messages.filter(shouldIncludeInContext).map<LlmChatMessage>(message => ({
-      role: message.role,
-      content: message.content,
-    }))
-
-    // appendUserMessage 已在本轮开始时写入 currentUserText，这里移除末尾那条原文防重复
-    const lastHistoryMessage = historyMessages[historyMessages.length - 1]
-    if (lastHistoryMessage?.role === 'user' && lastHistoryMessage.content === currentUserText) {
-      historyMessages.pop()
-    }
-
-    return [
-      ...historyMessages,
-      {
-        role: 'user',
-        content: currentPromptWithContext,
-      },
-    ]
-  } catch {
-    // 历史读取异常时降级为单轮模式，保证主链路可用
-    return [{ role: 'user', content: currentPromptWithContext }]
-  }
-}
-
-function shouldIncludeInContext(message: ChatMessage): message is ChatMessage & { role: 'user' | 'assistant' } {
-  if (message.role === 'user') {
-    if (message.state === 'cancelled') {
-      return false
-    }
-    return true
-  }
-
-  if (message.role !== 'assistant') {
-    return false
-  }
-
-  if (message.finishReason === 'stop' || message.finishReason === 'length') {
-    return true
-  }
-
-  if (message.finishReason === 'cancelled' || message.finishReason === 'error') {
-    return false
-  }
-
-  // 旧数据或异常数据缺失 finishReason 时，保守不注入上下文。
-  return false
 }
