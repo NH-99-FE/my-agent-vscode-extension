@@ -1,7 +1,5 @@
 import * as vscode from 'vscode'
-import type { ExtensionToWebviewMessage } from '@agent/types'
-import { registerWebviewMessageHandler } from './core/webview/messageHandler'
-import { createOrShowAgentPanel } from './core/webview/panel'
+import { AGENT_CHAT_VIEW_ID, AgentWebviewViewProvider } from './core/webview/viewProvider'
 
 /**
  * 扩展激活入口函数
@@ -9,31 +7,22 @@ import { createOrShowAgentPanel } from './core/webview/panel'
  *
  * 激活流程：
  * 1. 注册命令 `agent.openChat`
- * 2. 命令触发时创建或复用 Chat Webview
- * 3. 首次创建面板时绑定消息处理器
+ * 2. 注册 WebviewViewProvider 承载聊天视图
+ * 3. 命令触发时打开并聚焦聊天视图
  */
 export function activate(context: vscode.ExtensionContext) {
-  const openChatCommand = vscode.commands.registerCommand('agent.openChat', async () => {
-    // createOrShow 会返回是否首次创建，用于区分是否需要重复绑定监听器
-    const { panel, isNew } = await createOrShowAgentPanel(context)
-
-    // 已存在面板时仅显示，不重复注册 onDidReceiveMessage，避免重复响应
-    if (!isNew) {
-      return
-    }
-
-    // 将消息处理器生命周期绑定到 extension context，扩展卸载时自动清理
-    const messageDisposable = registerWebviewMessageHandler(panel, context)
-    context.subscriptions.push(messageDisposable)
-
-    // 面板首次就绪后通知前端，可用于前端初始化状态切换（如 loading -> ready）
-    const readyMessage: ExtensionToWebviewMessage = {
-      type: 'system.ready',
-      payload: { timestamp: Date.now() },
-    }
-    await panel.webview.postMessage(readyMessage)
+  const viewProvider = new AgentWebviewViewProvider(context)
+  const viewProviderDisposable = vscode.window.registerWebviewViewProvider(AGENT_CHAT_VIEW_ID, viewProvider, {
+    webviewOptions: {
+      retainContextWhenHidden: true,
+    },
   })
 
+  const openChatCommand = vscode.commands.registerCommand('agent.openChat', async () => {
+    await viewProvider.reveal()
+  })
+
+  context.subscriptions.push(viewProviderDisposable)
   context.subscriptions.push(openChatCommand)
 }
 

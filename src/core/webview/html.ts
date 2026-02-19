@@ -1,49 +1,5 @@
 import * as vscode from 'vscode'
 
-// WebviewPanel 的 viewType，VS Code 用它来区分面板实例类型。
-const PANEL_VIEW_TYPE = 'agent.chatPanel'
-
-// 进程内单例引用：确保重复触发命令时复用已有面板而不是不断新建。
-let currentPanel: vscode.WebviewPanel | undefined
-
-export interface AgentPanelResult {
-  panel: vscode.WebviewPanel
-  isNew: boolean
-}
-
-/**
- * 创建或显示 Agent 面板。
- * - 如果已有实例：直接 reveal，返回 isNew=false
- * - 如果无实例：创建新面板、注入 HTML、注册 dispose 清理，返回 isNew=true
- */
-export async function createOrShowAgentPanel(
-  context: vscode.ExtensionContext,
-): Promise<AgentPanelResult> {
-  if (currentPanel) {
-    // 固定在主编辑列显示；后续如需可配置，可改为读取设置项。
-    currentPanel.reveal(vscode.ViewColumn.One)
-    return { panel: currentPanel, isNew: false }
-  }
-
-  // localResourceRoots 限定 Webview 可访问资源目录，减少越权读取风险。
-  const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, 'Agent Chat', vscode.ViewColumn.One, {
-    enableScripts: true,
-    retainContextWhenHidden: true,
-    localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
-  })
-
-  panel.onDidDispose(() => {
-    // 面板关闭后释放单例引用，允许下次命令重新创建。
-    currentPanel = undefined
-  })
-
-  // 将打包后的前端 index.html 注入到 webview。
-  panel.webview.html = await getWebviewHtml(panel.webview, context.extensionUri)
-  currentPanel = panel
-
-  return { panel, isNew: true }
-}
-
 /**
  * 读取并加工 Webview HTML：
  * 1. 读 media/index.html
@@ -51,7 +7,7 @@ export async function createOrShowAgentPanel(
  * 3. 注入 CSP
  * 4. 失败时回退到纯文本提示页
  */
-async function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): Promise<string> {
+export async function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): Promise<string> {
   const mediaUri = vscode.Uri.joinPath(extensionUri, 'media')
   const indexUri = vscode.Uri.joinPath(mediaUri, 'index.html')
 

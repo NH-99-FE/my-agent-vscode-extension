@@ -49,3 +49,4 @@ coverage
 # media: 前端构建产物
 media/*
 !media/RADEME.md
+!media/logo.svg

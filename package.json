@@ -13,9 +13,28 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onCommand:agent.openChat"
+    "onCommand:agent.openChat",
+    "onView:agent.chatView"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agent",
+          "title": "Agent",
+          "icon": "media/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "agent": [
+        {
+          "id": "agent.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "agent.openChat",

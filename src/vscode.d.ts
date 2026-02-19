@@ -74,6 +74,7 @@ declare module 'vscode' {
   // Webview 运行时对象：设置 HTML、收发消息、转换资源路径。
   export interface Webview {
     readonly cspSource: string
+    options?: WebviewOptions
     html: string
     postMessage(message: unknown): Thenable<boolean>
     onDidReceiveMessage: Event<unknown>
@@ -85,6 +86,21 @@ declare module 'vscode' {
     readonly webview: Webview
     reveal(viewColumn?: ViewColumn): void
     onDidDispose: Event<void>
+  }
+
+  export interface WebviewView {
+    readonly webview: Webview
+    onDidDispose: Event<void>
+  }
+
+  export interface WebviewViewProvider {
+    resolveWebviewView(webviewView: WebviewView): void | Thenable<void>
+  }
+
+  export interface WebviewViewProviderRegistrationOptions {
+    webviewOptions?: {
+      retainContextWhenHidden?: boolean
+    }
   }
 
   // 扩展生命周期上下文：包含扩展 Uri 和统一资源回收容器。
@@ -119,10 +135,11 @@ declare module 'vscode' {
   export namespace commands {
     // 注册命令并返回可释放句柄。
     function registerCommand(command: string, callback: (...args: unknown[]) => unknown): Disposable
+    function executeCommand<T = unknown>(command: string, ...rest: unknown[]): Thenable<T>
   }
 
   export namespace window {
-    function showInformationMessage(message: string): Promise<string | undefined>
+    function showInformationMessage(message: string, ...items: string[]): Promise<string | undefined>
     function showOpenDialog(options?: OpenDialogOptions): Thenable<readonly Uri[] | undefined>
     const activeTextEditor: TextEditor | undefined
     const visibleTextEditors: readonly TextEditor[]
@@ -130,6 +147,11 @@ declare module 'vscode' {
     const onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>
     // 创建 WebviewPanel。
     function createWebviewPanel(viewType: string, title: string, showOptions: ViewColumn, options?: WebviewOptions): WebviewPanel
+    function registerWebviewViewProvider(
+      viewId: string,
+      provider: WebviewViewProvider,
+      options?: WebviewViewProviderRegistrationOptions
+    ): Disposable
   }
 
   export namespace workspace {

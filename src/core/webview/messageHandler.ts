@@ -16,9 +16,13 @@ interface InFlightRequest {
   requestId: string
 }
 
+interface WebviewHost {
+  webview: vscode.Webview
+}
+
 /**
  * 注册 Webview -> Extension 的消息处理器
- * @param panel Webview 面板
+ * @param panel Webview 宿主（支持 WebviewPanel / WebviewView）
  * @param context VS Code 扩展上下文
  * @returns 可释放的资源
  *
@@ -27,7 +31,7 @@ interface InFlightRequest {
  * 2. 根据 type 路由到对应处理逻辑
  * 3. 兜底返回统一错误消息
  */
-export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): vscode.Disposable {
+export function registerWebviewMessageHandler(panel: WebviewHost, context: vscode.ExtensionContext): vscode.Disposable {
   const sessionStore = new SessionStore(context)
   const chatService = new ChatService(llmClient, sessionStore, context)
   const sessionService = new SessionService(sessionStore)
@@ -159,7 +163,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
  * 3. 映射为协议内 chat.delta/chat.done/chat.error
  */
 async function handleChatSend(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.send' }>,
   chatService: ChatService,
   inFlightBySession: Map<string, InFlightRequest>
@@ -283,7 +287,7 @@ async function handleChatCancel(
 }
 
 async function handleContextFilesPick(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'context.files.pick' }>
 ): Promise<void> {
   const maxCount = Math.max(0, Math.floor(message.payload.maxCount))
@@ -316,7 +320,7 @@ async function handleContextFilesPick(
 }
 
 async function handleSettingsGet(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'settings.get' }>,
   settingsService: SettingsService
 ): Promise<void> {
@@ -329,7 +333,7 @@ async function handleSettingsGet(
 }
 
 async function handleContextEditorStateSubscribe(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'context.editor.state.subscribe' }>,
   ensureSubscription: () => void
 ): Promise<void> {
@@ -342,7 +346,7 @@ function handleContextEditorStateUnsubscribe(disposeSubscription: () => void): v
 }
 
 async function handleSettingsUpdate(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'settings.update' }>,
   settingsService: SettingsService
 ): Promise<void> {
@@ -355,7 +359,7 @@ async function handleSettingsUpdate(
 }
 
 async function handleSettingsApiKeySet(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.set' }>,
   settingsService: SettingsService
 ): Promise<void> {
@@ -368,7 +372,7 @@ async function handleSettingsApiKeySet(
 }
 
 async function handleSettingsApiKeyDelete(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.delete' }>,
   settingsService: SettingsService
 ): Promise<void> {
@@ -381,7 +385,7 @@ async function handleSettingsApiKeyDelete(
 }
 
 async function handleChatSessionCreate(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.session.create' }>,
   sessionService: SessionService
 ): Promise<void> {
@@ -396,7 +400,7 @@ async function handleChatSessionCreate(
 }
 
 async function handleChatSessionGet(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.session.get' }>,
   sessionService: SessionService
 ): Promise<void> {
@@ -419,7 +423,7 @@ async function handleChatSessionGet(
 }
 
 async function handleChatHistoryGet(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.history.get' }>,
   sessionService: SessionService
 ): Promise<void> {
@@ -440,7 +444,7 @@ async function handleChatHistoryGet(
 }
 
 async function handleChatHistoryDelete(
-  panel: vscode.WebviewPanel,
+  panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.history.delete' }>,
   sessionService: SessionService
 ): Promise<void> {
@@ -464,7 +468,7 @@ async function handleChatHistoryDelete(
 /**
  * 统一系统错误消息出口，后续可在这里接入 telemetry。
  */
-async function postSystemError(panel: vscode.WebviewPanel, message: string, requestId?: string): Promise<void> {
+async function postSystemError(panel: WebviewHost, message: string, requestId?: string): Promise<void> {
   await postTypedMessage(panel, {
     type: 'system.error',
     ...(requestId !== undefined ? { requestId } : {}),
@@ -472,7 +476,7 @@ async function postSystemError(panel: vscode.WebviewPanel, message: string, requ
   })
 }
 
-async function postEditorContextState(panel: vscode.WebviewPanel, requestId?: string): Promise<void> {
+async function postEditorContextState(panel: WebviewHost, requestId?: string): Promise<void> {
   await postTypedMessage(panel, {
     type: 'context.editor.state',
     ...(requestId !== undefined ? { requestId } : {}),
@@ -483,7 +487,7 @@ async function postEditorContextState(panel: vscode.WebviewPanel, requestId?: st
 /**
  * 统一发送扩展到前端消息，保持发送侧类型收敛。
  */
-async function postTypedMessage(panel: vscode.WebviewPanel, message: ExtensionToWebviewMessage): Promise<void> {
+async function postTypedMessage(panel: WebviewHost, message: ExtensionToWebviewMessage): Promise<void> {
   await panel.webview.postMessage(message)
 }
 
@@ -909,3 +913,4 @@ function isEmptyObject(value: unknown): boolean {
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown message handler error.'
 }
+
