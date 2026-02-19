@@ -21,7 +21,7 @@
       "activitybar": [
         {
           "id": "agent",
-          "title": "Agent",
+          "title": "Scout",
           "icon": "media/logo.svg"
         }
       ]
@@ -30,7 +30,7 @@
       "agent": [
         {
           "id": "agent.chatView",
-          "name": "Chat",
+          "name": "你的编程助手",
           "type": "webview"
         }
       ]
