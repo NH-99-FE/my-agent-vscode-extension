@@ -1,5 +1,5 @@
 import type { ReasoningLevel } from '@agent/types'
-import { ArrowUp, Box, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus, Square } from 'lucide-react'
+import { ArrowUp, Box, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react'
 import { IconTooltip } from '@/components/common/IconTooltip'
 import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -297,15 +297,15 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
             disabled={isSending ? false : !canSend}
             aria-label={isSending ? '暂停生成' : '发送消息'}
             className={cn(
-              'rounded-full p-1 transition-colors duration-150',
+              'inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-150',
               isSending
-                ? 'cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                ? 'cursor-pointer bg-zinc-100 text-zinc-900'
                 : canSend
-                  ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'cursor-not-allowed bg-muted text-muted-foreground'
+                  ? 'cursor-pointer bg-zinc-100 text-zinc-900'
+                  : 'cursor-not-allowed bg-zinc-300 text-zinc-500'
             )}
           >
-            {isSending ? <Square className="h-6 w-6" /> : <ArrowUp className="h-6 w-6" />}
+            {isSending ? <span className="h-2.5 w-2.5 rounded-[2px] bg-current" /> : <ArrowUp className="h-5 w-5" />}
           </button>
         </IconTooltip>
       </div>
