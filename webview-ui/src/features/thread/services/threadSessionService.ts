@@ -1,5 +1,6 @@
 import type { ExtensionToWebviewMessage, ChatDoneMessage } from '@agent/types'
 import { resolveStreamGate, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR } from './streamRequestGuard'
+import type { StreamDeltaBuffer } from './streamDeltaBuffer'
 
 // 线程会话消息操作接口
 type ThreadSessionMessageActions = {
@@ -28,10 +29,16 @@ export function handleThreadSessionMessage(message: ExtensionToWebviewMessage, a
         return
       }
       if (gate === 'missing_with_active') {
+        // 先冲刷同会话已缓冲增量，避免随后协议错误收尾后又被 rAF 补写出“复活”的 streaming 消息。
+        activeStreamDeltaBuffer?.flushSession(message.payload.sessionId)
         actions.setSessionProtocolError(message.payload.sessionId, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR)
         return
       }
-      actions.appendAssistantDelta(message.payload.sessionId, message.payload.textDelta)
+      if (activeStreamDeltaBuffer) {
+        activeStreamDeltaBuffer.enqueue(message.payload.sessionId, message.payload.textDelta)
+      } else {
+        actions.appendAssistantDelta(message.payload.sessionId, message.payload.textDelta)
+      }
       return
     }
     case 'chat.done': {
@@ -39,6 +46,7 @@ export function handleThreadSessionMessage(message: ExtensionToWebviewMessage, a
       if (gate === 'ignore') {
         return
       }
+      activeStreamDeltaBuffer?.flushSession(message.payload.sessionId)
       if (gate === 'missing_with_active') {
         actions.setSessionProtocolError(message.payload.sessionId, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR)
         return
@@ -51,6 +59,7 @@ export function handleThreadSessionMessage(message: ExtensionToWebviewMessage, a
       if (gate === 'ignore') {
         return
       }
+      activeStreamDeltaBuffer?.flushSession(message.payload.sessionId)
       if (gate === 'missing_with_active') {
         actions.setSessionProtocolError(message.payload.sessionId, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR)
         return
@@ -62,4 +71,10 @@ export function handleThreadSessionMessage(message: ExtensionToWebviewMessage, a
       return
     }
   }
+}
+
+let activeStreamDeltaBuffer: StreamDeltaBuffer | null = null
+
+export function setThreadSessionDeltaBuffer(buffer: StreamDeltaBuffer | null): void {
+  activeStreamDeltaBuffer = buffer
 }

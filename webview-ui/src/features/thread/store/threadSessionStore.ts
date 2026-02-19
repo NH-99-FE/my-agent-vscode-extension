@@ -41,6 +41,7 @@ type ThreadSessionStoreActions = {
   endAssistantRequest: (sessionId: string, requestId: string) => void // 仅在 requestId 匹配时结束活跃请求
   appendUserMessage: (sessionId: string, text: string) => void // 追加用户消息（发送时写入）
   appendAssistantDelta: (sessionId: string, textDelta: string) => void // 消费 chat.delta，将增量拼接到助手消息
+  appendAssistantDeltaBatch: (sessionId: string, textDeltaBatch: string) => void // 批量消费 chat.delta（同帧合并）
   completeAssistantMessage: (sessionId: string, finishReason: ThreadFinishReason) => void // 消费 chat.done，更新助手消息结束态
   setAssistantError: (sessionId: string, errorMessage: string) => void // 消费 chat.error，标记助手消息错误
   hydrateSessionFromBackend: (session: ChatSession) => void // 用后端会话消息覆盖并恢复前端会话状态
@@ -174,6 +175,61 @@ function mapBackendMessagesToThreadMessages(messages: ChatSession['messages']): 
   }))
 }
 
+type AssistantDeltaPatch = Pick<ThreadSessionStoreState, 'sessionsById' | 'activeAssistantMessageIdBySession'>
+
+function buildAppendAssistantDeltaPatch(
+  state: ThreadSessionStoreState,
+  sessionId: string,
+  textDelta: string
+): AssistantDeltaPatch {
+  const sessionsById = ensureSessionRecord(state.sessionsById, sessionId)
+  const session = getSessionState(sessionsById, sessionId)
+  const activeAssistantMessageId = state.activeAssistantMessageIdBySession[sessionId]
+  const nextActiveBySession = { ...state.activeAssistantMessageIdBySession }
+
+  if (activeAssistantMessageId) {
+    let matchedActiveMessage = false
+    const messages: ThreadMessageItem[] = session.messages.map(message => {
+      if (message.id !== activeAssistantMessageId) {
+        return message
+      }
+      matchedActiveMessage = true
+      return appendStreamingDelta(message, textDelta)
+    })
+
+    if (matchedActiveMessage) {
+      const nextSession: ThreadSessionState = {
+        ...session,
+        error: null,
+        messages,
+      }
+      return {
+        sessionsById: {
+          ...sessionsById,
+          [sessionId]: nextSession,
+        },
+        activeAssistantMessageIdBySession: nextActiveBySession,
+      }
+    }
+  }
+
+  const messageId = createMessageId()
+  nextActiveBySession[sessionId] = messageId
+  const nextSession: ThreadSessionState = {
+    ...session,
+    error: null,
+    messages: [...session.messages, createAssistantStreamingMessage(messageId, textDelta)],
+  }
+
+  return {
+    sessionsById: {
+      ...sessionsById,
+      [sessionId]: nextSession,
+    },
+    activeAssistantMessageIdBySession: nextActiveBySession,
+  }
+}
+
 const useThreadSessionStore = create<ThreadSessionStore>((set, get) => ({
   sessionsById: {},
   activeAssistantMessageIdBySession: {},
@@ -264,57 +320,14 @@ const useThreadSessionStore = create<ThreadSessionStore>((set, get) => ({
     },
     /** 处理流式增量，若存在 activeAssistantMessageId 则追加到该消息；否则创建新消息 */
     appendAssistantDelta: (sessionId, textDelta) => {
-      if (!isValidSessionId(sessionId) || !textDelta) {
+      get().actions.appendAssistantDeltaBatch(sessionId, textDelta)
+    },
+    /** 处理同一帧合并后的流式增量，语义与 appendAssistantDelta 保持一致 */
+    appendAssistantDeltaBatch: (sessionId, textDeltaBatch) => {
+      if (!isValidSessionId(sessionId) || !textDeltaBatch) {
         return
       }
-      set(state => {
-        const sessionsById = ensureSessionRecord(state.sessionsById, sessionId)
-        const session = getSessionState(sessionsById, sessionId)
-        const activeAssistantMessageId = state.activeAssistantMessageIdBySession[sessionId]
-        const nextActiveBySession = { ...state.activeAssistantMessageIdBySession }
-
-        if (activeAssistantMessageId) {
-          let matchedActiveMessage = false
-          const messages: ThreadMessageItem[] = session.messages.map(message => {
-            if (message.id !== activeAssistantMessageId) {
-              return message
-            }
-            matchedActiveMessage = true
-            return appendStreamingDelta(message, textDelta)
-          })
-
-          if (matchedActiveMessage) {
-            const nextSession: ThreadSessionState = {
-              ...session,
-              error: null,
-              messages,
-            }
-            return {
-              sessionsById: {
-                ...sessionsById,
-                [sessionId]: nextSession,
-              },
-              activeAssistantMessageIdBySession: nextActiveBySession,
-            }
-          }
-        }
-
-        const messageId = createMessageId()
-        nextActiveBySession[sessionId] = messageId
-        const nextSession: ThreadSessionState = {
-          ...session,
-          error: null,
-          messages: [...session.messages, createAssistantStreamingMessage(messageId, textDelta)],
-        }
-
-        return {
-          sessionsById: {
-            ...sessionsById,
-            [sessionId]: nextSession,
-          },
-          activeAssistantMessageIdBySession: nextActiveBySession,
-        }
-      })
+      set(state => buildAppendAssistantDeltaPatch(state, sessionId, textDeltaBatch))
     },
     /** 完成助手消息流式，标记结束原因并清理 active 状态 */
     completeAssistantMessage: (sessionId, finishReason) => {

@@ -15,7 +15,8 @@ import {
   getContextFilesRemaining,
   handleThreadExtensionMessage,
 } from '../services/threadMessageService'
-import { handleThreadSessionMessage } from '../services/threadSessionService'
+import { handleThreadSessionMessage, setThreadSessionDeltaBuffer } from '../services/threadSessionService'
+import { createStreamDeltaBuffer } from '../services/streamDeltaBuffer'
 import {
   useThreadComposerActions,
   useThreadComposerAttachments,
@@ -86,6 +87,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const {
     appendUserMessage,
     appendAssistantDelta,
+    appendAssistantDeltaBatch,
     completeAssistantMessage,
     setAssistantError,
     beginAssistantRequest,
@@ -113,6 +115,13 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
       })),
     [settingsModelOptions]
   )
+  const streamDeltaBuffer = useMemo(
+    () =>
+      createStreamDeltaBuffer({
+        appendAssistantDeltaBatch,
+      }),
+    [appendAssistantDeltaBatch]
+  )
 
   const resizeTextarea = () => {
     const el = textareaRef.current
@@ -134,6 +143,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }, [initSession, routeThreadId])
 
   useEffect(() => {
+    setThreadSessionDeltaBuffer(streamDeltaBuffer)
     const dispose = bridge.onMessage(message => {
       handleThreadSessionMessage(message, {
         appendAssistantDelta,
@@ -154,7 +164,11 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
       })
     })
 
-    return dispose
+    return () => {
+      dispose()
+      streamDeltaBuffer.dispose()
+      setThreadSessionDeltaBuffer(null)
+    }
   }, [
     addPickedFiles,
     appendAssistantDelta,
@@ -167,6 +181,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     setAssistantError,
     setInlineNotice,
     setSending,
+    streamDeltaBuffer,
   ])
 
   useEffect(() => {

@@ -3,3 +3,5 @@ Hoverable
 Zhipu
 Qwen
 xhigh
+overscan
+OVERSCAN
