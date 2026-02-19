@@ -246,7 +246,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }
 
   return (
-    <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground shadow-xs">
+    <div className="relative mx-3 my-2 flex flex-col rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-xs">
       <AddContextFiles
         files={contextFiles}
         onRemove={id => {
