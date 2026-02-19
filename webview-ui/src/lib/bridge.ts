@@ -65,6 +65,7 @@ const extensionToWebviewTypes: ExtensionToWebviewMessage['type'][] = [
   'chat.error',
   'chat.history.list',
   'context.files.picked',
+  'context.editor.state',
   'chat.session.created',
   'chat.session.state',
   'settings.state',

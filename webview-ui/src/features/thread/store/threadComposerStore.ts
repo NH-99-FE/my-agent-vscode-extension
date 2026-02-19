@@ -18,6 +18,7 @@ type ThreadComposerDraft = {
   model: string // 会话草稿模型选择
   reasoningLevel: ReasoningLevel // 会话草稿推理强度
   attachments: ChatAttachment[] // 会话草稿附件列表
+  includeActiveEditorContext: boolean // 是否注入活动编辑器上下文
   inlineNotice: string | null // 会话内联提示（上限、错误等）
 }
 
@@ -37,6 +38,7 @@ type ThreadComposerActions = {
   setText: (text: string) => void // 更新当前会话输入框文本
   setModel: (model: string) => void // 更新当前会话模型选择
   setReasoningLevel: (reasoningLevel: ReasoningLevel) => void // 更新当前会话推理强度选择
+  setIncludeActiveEditorContext: (includeActiveEditorContext: boolean, targetSessionId?: string) => void // 更新指定会话活动编辑器上下文注入开关
   addPickedFiles: (files: ChatAttachment[], targetSessionId?: string) => void // 合并文件选择结果（去重 + 上限控制），可指定写入目标会话
   markPendingContextPick: (requestId: string, targetSessionId?: string) => void // 记录一次文件选择请求所属会话
   consumePendingContextPickSession: (requestId?: string) => string | undefined // 消费文件选择回包关联，返回目标会话并清理 pending 映射
@@ -55,6 +57,7 @@ function createDefaultDraft(): ThreadComposerDraft {
     model: DEFAULT_MODEL,
     reasoningLevel: DEFAULT_REASONING_LEVEL,
     attachments: [],
+    includeActiveEditorContext: true,
     inlineNotice: null,
   }
 }
@@ -169,6 +172,21 @@ const useThreadComposerStore = create<ThreadComposerStore>((set, get) => ({
             [state.sessionId]: {
               ...currentDraft,
               reasoningLevel,
+            },
+          },
+        }
+      })
+    },
+    setIncludeActiveEditorContext: (includeActiveEditorContext, targetSessionId) => {
+      set(state => {
+        const resolvedSessionId = resolveSessionId(state, targetSessionId)
+        const currentDraft = getDraftOrDefault(state, resolvedSessionId)
+        return {
+          draftsBySession: {
+            ...state.draftsBySession,
+            [resolvedSessionId]: {
+              ...currentDraft,
+              includeActiveEditorContext,
             },
           },
         }
@@ -325,6 +343,9 @@ export const useThreadComposerText = () => useThreadComposerStore(state => selec
 export const useThreadComposerModel = () => useThreadComposerStore(state => selectCurrentDraft(state).model)
 // 仅订阅当前会话推理强度
 export const useThreadComposerReasoningLevel = () => useThreadComposerStore(state => selectCurrentDraft(state).reasoningLevel)
+// 仅订阅当前会话活动编辑器上下文注入开关
+export const useThreadComposerIncludeActiveEditorContext = () =>
+  useThreadComposerStore(state => selectCurrentDraft(state).includeActiveEditorContext)
 // 仅订阅当前会话附件列表
 export const useThreadComposerAttachments = () => useThreadComposerStore(state => selectCurrentDraft(state).attachments)
 // 仅订阅当前会话内联提示

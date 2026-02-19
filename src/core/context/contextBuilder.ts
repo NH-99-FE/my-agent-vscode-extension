@@ -1,5 +1,5 @@
 import type { BuiltContext, ContextSnippet } from '@agent/types'
-import * as vscode from 'vscode'
+import { getSelectionLineRange, resolveEditorForContext } from './editorState'
 
 let snippetCounter = 0
 
@@ -11,7 +11,7 @@ let snippetCounter = 0
  */
 export function buildContextFromActiveEditor(): BuiltContext {
   const snippets: ContextSnippet[] = []
-  const editor = vscode.window.activeTextEditor
+  const editor = resolveEditorForContext()
   if (!editor) {
     return { snippets }
   }
@@ -34,16 +34,17 @@ export function buildContextFromActiveEditor(): BuiltContext {
   if (!editor.selection.isEmpty) {
     const selectionText = editor.document.getText(editor.selection)
     const normalizedSelectionText = normalizeSnippetContent(selectionText)
+    const selectionLineRange = getSelectionLineRange(editor.selection)
 
-    if (normalizedSelectionText) {
+    if (normalizedSelectionText && selectionLineRange) {
       snippets.push({
         id: createSnippetId('selection'),
         source: 'selection',
         filePath: editor.document.uri.fsPath,
         languageId: editor.document.languageId,
         content: normalizedSelectionText,
-        startLine: editor.selection.start.line + 1,
-        endLine: editor.selection.end.line + 1,
+        startLine: selectionLineRange.startLine,
+        endLine: selectionLineRange.endLine,
       })
     }
   }

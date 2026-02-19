@@ -36,6 +36,7 @@ export interface ChatSendMessage extends MessageMeta {
     model: string // 前端选择的目标模型标识
     reasoningLevel: ReasoningLevel // 推理强度等级
     attachments: ChatAttachment[] // 参与本次请求的附件列表
+    includeActiveEditorContext: boolean // 是否注入活动编辑器上下文
   }
 }
 
@@ -53,6 +54,16 @@ export interface ContextFilesPickMessage extends MessageMeta {
   payload: {
     maxCount: number // 本次最多允许选择的文件数
   }
+}
+
+// 前端 -> 扩展：订阅活动编辑器上下文状态
+export interface ContextEditorStateSubscribeMessage extends MessageMeta {
+  type: 'context.editor.state.subscribe' // 消息类型
+}
+
+// 前端 -> 扩展：取消订阅活动编辑器上下文状态
+export interface ContextEditorStateUnsubscribeMessage extends MessageMeta {
+  type: 'context.editor.state.unsubscribe' // 消息类型
 }
 
 // 前端 -> 扩展：读取当前设置状态
@@ -159,6 +170,17 @@ export interface ContextFilesPickedMessage extends MessageMeta {
   }
 }
 
+// 扩展 -> 前端：活动编辑器上下文状态
+export interface ContextEditorStateMessage extends MessageMeta {
+  type: 'context.editor.state' // 消息类型
+  payload: {
+    hasActiveEditor: boolean // 是否存在活动编辑器
+    fileName: string | null // 当前文件名（无活动编辑器时为 null）
+    selectedLineCount: number // 选中行数，无选区时为 0
+    timestamp: number // 状态更新时间戳
+  }
+}
+
 // 扩展 -> 前端：设置状态快照
 export interface SettingsStateMessage extends MessageMeta {
   type: 'settings.state' // 消息类型
@@ -221,6 +243,7 @@ export type ExtensionToWebviewMessage =
   | ChatDoneMessage
   | ChatErrorMessage
   | ContextFilesPickedMessage
+  | ContextEditorStateMessage
   | SettingsStateMessage
   | ChatSessionCreatedMessage
   | ChatSessionStateMessage
@@ -232,6 +255,8 @@ export type WebviewToExtensionMessage =
   | ChatSendMessage
   | ChatCancelMessage
   | ContextFilesPickMessage
+  | ContextEditorStateSubscribeMessage
+  | ContextEditorStateUnsubscribeMessage
   | SettingsGetMessage
   | SettingsUpdateMessage
   | SettingsApiKeySetMessage

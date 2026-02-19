@@ -10,6 +10,7 @@ type SendChatInput = {
   model: string // 目标模型 ID
   reasoningLevel: ReasoningLevel // 推理强度等级
   attachments: ChatAttachment[] // 本次请求附带的上下文附件
+  includeActiveEditorContext: boolean // 是否注入活动编辑器上下文
 }
 
 // 线程消息操作接口
@@ -40,6 +41,7 @@ export function buildChatSendMessage(input: SendChatInput): WebviewToExtensionMe
       model: input.model,
       reasoningLevel: input.reasoningLevel,
       attachments: input.attachments,
+      includeActiveEditorContext: input.includeActiveEditorContext,
     },
   }
 }

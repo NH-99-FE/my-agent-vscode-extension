@@ -47,6 +47,11 @@ declare module 'vscode' {
     selection: Selection
   }
 
+  export interface TextEditorSelectionChangeEvent {
+    textEditor: TextEditor
+    selections: readonly Selection[]
+  }
+
   // 编辑器列位枚举，当前仅用到第一列。
   export enum ViewColumn {
     One = 1,
@@ -120,6 +125,9 @@ declare module 'vscode' {
     function showInformationMessage(message: string): Promise<string | undefined>
     function showOpenDialog(options?: OpenDialogOptions): Thenable<readonly Uri[] | undefined>
     const activeTextEditor: TextEditor | undefined
+    const visibleTextEditors: readonly TextEditor[]
+    const onDidChangeActiveTextEditor: Event<TextEditor | undefined>
+    const onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>
     // 创建 WebviewPanel。
     function createWebviewPanel(viewType: string, title: string, showOptions: ViewColumn, options?: WebviewOptions): WebviewPanel
   }

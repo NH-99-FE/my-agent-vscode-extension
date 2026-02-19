@@ -86,8 +86,8 @@ export function OptionSelect({
               size="sm"
               className="h-8 rounded-full border-0 bg-transparent px-2 text-muted-foreground shadow-none transition-colors hover:bg-muted focus-visible:ring-0 data-[state=open]:bg-muted"
             >
-              <span className="inline-flex items-center md:hidden">{selected ? <selected.icon className="h-4 w-4" /> : null}</span>
-              <span className="hidden text-xs md:inline">{selected?.label ?? title}</span>
+              <span className="inline-flex items-center lg:hidden">{selected ? <selected.icon className="h-4 w-4" /> : null}</span>
+              <span className="hidden text-xs lg:inline">{selected?.label ?? title}</span>
             </SelectTrigger>
           </div>
         </TooltipTrigger>

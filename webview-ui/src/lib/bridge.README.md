@@ -20,8 +20,8 @@
 
 当前常用类型：
 
-- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`、`chat.session.create`、`settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`
-- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`、`chat.session.created`、`settings.state`
+- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`、`context.editor.state.subscribe`、`context.editor.state.unsubscribe`、`chat.session.create`、`settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`
+- 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`、`context.editor.state`、`chat.session.created`、`settings.state`
 
 `settings.state` 在当前联调中除了基础字段外，可能包含模型配置字段（如 `defaultModel`、`models`），前端会做兼容消费。
 
@@ -44,6 +44,7 @@ function Demo() {
   const send = () => {
     const message: WebviewToExtensionMessage = {
       type: 'chat.send',
+      requestId: 'req-1',
       payload: {
         sessionId: 'session-1',
         text: 'hello',
@@ -55,6 +56,7 @@ function Demo() {
             name: 'README.md',
           },
         ],
+        includeActiveEditorContext: true,
       },
     }
     bridge.send(message)
@@ -112,3 +114,6 @@ function Demo() {
 
 3. 类型报错  
    优先检查消息对象是否满足 `WebviewToExtensionMessage` 联合类型要求（`type` 与 `payload` 字段匹配）。
+
+4. 活动编辑器状态不更新  
+   确认页面挂载后已发送 `context.editor.state.subscribe`，并且 `bridge.ts` 白名单包含 `context.editor.state`。

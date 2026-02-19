@@ -17,6 +17,7 @@ export interface ChatServiceRequest {
   model: string // 目标模型
   reasoningLevel: ReasoningLevel // 推理强度
   attachments: ChatAttachment[] // 附件列表
+  includeActiveEditorContext: boolean // 是否注入活动编辑器上下文
 }
 
 // 聊天服务配置选项
@@ -60,7 +61,7 @@ export class ChatService {
     // 先写入用户消息，保证会话时间线与真实请求顺序一致
     await this.sessionStore.appendUserMessage(request.sessionId, request.text, request.requestId)
 
-    const editorContext = buildContextFromActiveEditor()
+    const editorContext = request.includeActiveEditorContext ? buildContextFromActiveEditor() : { snippets: [] }
     const attachmentContext = await buildAttachmentContext(request.attachments)
     const llmMessages = await buildLlmMessagesForCurrentTurn({
       sessionStore: this.sessionStore,

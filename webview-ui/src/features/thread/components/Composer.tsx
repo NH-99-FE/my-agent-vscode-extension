@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { OptionSelect } from '@/components/common/OptionSelect'
 import { AddContextFiles, type ContextFileItem } from './AddContextFiles'
+import { EditorContextToggle } from './EditorContextToggle'
 import { bridge } from '@/lib/bridge'
 import { useNavigate } from 'react-router'
 import {
@@ -17,16 +18,19 @@ import {
 } from '../services/threadMessageService'
 import { handleThreadSessionMessage, setThreadSessionDeltaBuffer } from '../services/threadSessionService'
 import { createStreamDeltaBuffer } from '../services/streamDeltaBuffer'
+import { useEditorContextSubscription } from '../hooks/useEditorContextSubscription'
 import {
   useThreadComposerActions,
   useThreadComposerAttachments,
   useThreadComposerCanSend,
+  useThreadComposerIncludeActiveEditorContext,
   useThreadComposerIsSending,
   useThreadComposerModel,
   useThreadComposerReasoningLevel,
   useThreadComposerSessionId,
   useThreadComposerText,
 } from '../store/threadComposerStore'
+import { useEditorContextHasActiveEditor, useEditorContextLabel } from '../store/threadEditorContextStore'
 import { parseModelsText, useSettingsDefaultModel, useSettingsModelsText } from '../store/threadWorkspaceStore'
 import { useThreadSessionActions } from '../store/threadSessionStore'
 import { cn } from '@/lib/utils'
@@ -57,6 +61,9 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const model = useThreadComposerModel()
   const reasoningLevel = useThreadComposerReasoningLevel()
   const attachments = useThreadComposerAttachments()
+  const includeActiveEditorContext = useThreadComposerIncludeActiveEditorContext()
+  const editorContextLabel = useEditorContextLabel()
+  const editorHasActiveEditor = useEditorContextHasActiveEditor()
   const settingsDefaultModel = useSettingsDefaultModel()
   const settingsModelsText = useSettingsModelsText()
   const settingsModelOptions = useMemo(() => {
@@ -74,6 +81,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     setText,
     setModel,
     setReasoningLevel,
+    setIncludeActiveEditorContext,
     addPickedFiles,
     markPendingContextPick,
     consumePendingContextPickSession,
@@ -133,6 +141,8 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   useLayoutEffect(() => {
     resizeTextarea()
   }, [text])
+
+  useEditorContextSubscription()
 
   useEffect(() => {
     initSession(routeThreadId)
@@ -229,6 +239,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         model,
         reasoningLevel,
         attachments,
+        includeActiveEditorContext,
       })
     )
     // 发送成功发起后立即清空输入框，避免旧草稿残留在输入区。
@@ -246,7 +257,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }
 
   return (
-    <div className="relative mx-3 my-2 flex flex-col rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-xs">
+    <div className="relative mx-3 my-2 flex flex-col overflow-hidden rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-xs">
       <AddContextFiles
         files={contextFiles}
         onRemove={id => {
@@ -275,6 +286,14 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
             <Plus className="h-5 w-5" />
           </button>
         </IconTooltip>
+        <EditorContextToggle
+          enabled={includeActiveEditorContext}
+          label={editorContextLabel}
+          hasActiveEditor={editorHasActiveEditor}
+          onToggle={() => {
+            setIncludeActiveEditorContext(!includeActiveEditorContext)
+          }}
+        />
         <OptionSelect
           title="选择模型"
           hoverTip="选择模型"

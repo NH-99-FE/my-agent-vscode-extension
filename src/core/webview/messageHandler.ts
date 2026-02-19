@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import type { ChatAttachment, ExtensionToWebviewMessage, ProviderDefault, ReasoningLevel, WebviewToExtensionMessage } from '@agent/types'
 import { ChatService } from '../chat/chatService'
 import { SessionService } from '../chat/sessionService'
+import { getEditorContextState } from '../context/editorState'
 import { createLlmClient, LlmAbortError, LlmCancellationController, LlmTimeoutError } from '../llm/client'
 import { SettingsService } from '../settings/settingsService'
 import { SessionStore } from '../storage/sessionStore'
@@ -33,8 +34,51 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
   const settingsService = new SettingsService(context)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求
   const inFlightBySession = new Map<string, InFlightRequest>()
+  let editorStateSubscription: vscode.Disposable | undefined
+  let editorStateSubscriberCount = 0
 
-  return panel.webview.onDidReceiveMessage(async (message: unknown) => {
+  const stopEditorStateSubscription = () => {
+    editorStateSubscription?.dispose()
+    editorStateSubscription = undefined
+  }
+
+  const startEditorStateSubscription = () => {
+    if (editorStateSubscription) {
+      return
+    }
+
+    const onDidChangeActiveEditor = vscode.window.onDidChangeActiveTextEditor(() => {
+      void postEditorContextState(panel)
+    })
+    const onDidChangeSelection = vscode.window.onDidChangeTextEditorSelection(event => {
+      if (event.textEditor === vscode.window.activeTextEditor) {
+        void postEditorContextState(panel)
+      }
+    })
+    editorStateSubscription = {
+      dispose: () => {
+        onDidChangeActiveEditor.dispose()
+        onDidChangeSelection.dispose()
+      },
+    }
+  }
+
+  const subscribeEditorState = () => {
+    editorStateSubscriberCount += 1
+    startEditorStateSubscription()
+  }
+
+  const unsubscribeEditorState = () => {
+    if (editorStateSubscriberCount <= 0) {
+      return
+    }
+    editorStateSubscriberCount -= 1
+    if (editorStateSubscriberCount === 0) {
+      stopEditorStateSubscription()
+    }
+  }
+
+  const onDidReceiveMessageDisposable = panel.webview.onDidReceiveMessage(async (message: unknown) => {
     const parsedMessage = parseInboundMessage(message)
     if (!parsedMessage) {
       // 非法格式直接返回 system.error，便于前端统一提示。
@@ -62,6 +106,12 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
           break
         case 'context.files.pick':
           await handleContextFilesPick(panel, parsedMessage)
+          break
+        case 'context.editor.state.subscribe':
+          await handleContextEditorStateSubscribe(panel, parsedMessage, subscribeEditorState)
+          break
+        case 'context.editor.state.unsubscribe':
+          handleContextEditorStateUnsubscribe(unsubscribeEditorState)
           break
         case 'settings.get':
           await handleSettingsGet(panel, parsedMessage, settingsService)
@@ -92,6 +142,14 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
       await postSystemError(panel, toErrorMessage(error), parsedMessage.requestId)
     }
   })
+
+  return {
+    dispose: () => {
+      onDidReceiveMessageDisposable.dispose()
+      editorStateSubscriberCount = 0
+      stopEditorStateSubscription()
+    },
+  }
 }
 
 /**
@@ -270,6 +328,19 @@ async function handleSettingsGet(
   })
 }
 
+async function handleContextEditorStateSubscribe(
+  panel: vscode.WebviewPanel,
+  message: Extract<WebviewToExtensionMessage, { type: 'context.editor.state.subscribe' }>,
+  ensureSubscription: () => void
+): Promise<void> {
+  ensureSubscription()
+  await postEditorContextState(panel, message.requestId)
+}
+
+function handleContextEditorStateUnsubscribe(disposeSubscription: () => void): void {
+  disposeSubscription()
+}
+
 async function handleSettingsUpdate(
   panel: vscode.WebviewPanel,
   message: Extract<WebviewToExtensionMessage, { type: 'settings.update' }>,
@@ -401,6 +472,14 @@ async function postSystemError(panel: vscode.WebviewPanel, message: string, requ
   })
 }
 
+async function postEditorContextState(panel: vscode.WebviewPanel, requestId?: string): Promise<void> {
+  await postTypedMessage(panel, {
+    type: 'context.editor.state',
+    ...(requestId !== undefined ? { requestId } : {}),
+    payload: getEditorContextState(),
+  })
+}
+
 /**
  * 统一发送扩展到前端消息，保持发送侧类型收敛。
  */
@@ -455,7 +534,11 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       const model = asNonEmptyString(payload.model)
       const reasoningLevel = asReasoningLevel(payload.reasoningLevel)
       const attachments = asAttachments(payload.attachments)
+      const includeActiveEditorContext = asOptionalBoolean(payload.includeActiveEditorContext)
       if (!sessionId || text === undefined || !model || !reasoningLevel || !attachments) {
+        return undefined
+      }
+      if (payload.includeActiveEditorContext !== undefined && includeActiveEditorContext === undefined) {
         return undefined
       }
 
@@ -468,6 +551,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
           model,
           reasoningLevel,
           attachments,
+          includeActiveEditorContext: includeActiveEditorContext ?? true,
         },
       }
       return chatSendMessage
@@ -507,6 +591,26 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
         },
       }
       return contextFilesPickMessage
+    }
+    case 'context.editor.state.subscribe': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+      const subscribeMessage: WebviewToExtensionMessage = {
+        type: 'context.editor.state.subscribe',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return subscribeMessage
+    }
+    case 'context.editor.state.unsubscribe': {
+      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
+        return undefined
+      }
+      const unsubscribeMessage: WebviewToExtensionMessage = {
+        type: 'context.editor.state.unsubscribe',
+        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
+      }
+      return unsubscribeMessage
     }
     case 'settings.get': {
       if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
@@ -685,6 +789,16 @@ function asOptionalObjectWithOptionalNumberTimestamp(value: unknown): { timestam
  */
 function asString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
+    return undefined
+  }
+  return value
+}
+
+function asOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (typeof value !== 'boolean') {
     return undefined
   }
   return value
