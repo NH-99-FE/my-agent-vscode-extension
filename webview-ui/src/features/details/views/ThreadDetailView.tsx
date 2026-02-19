@@ -115,7 +115,7 @@ export const ThreadDetailView = ({ threadId }: ThreadDetailViewProps) => {
             overscan={DEFAULT_OVERSCAN}
           />
           {showJumpToLatest ? (
-            <div className="pointer-events-none absolute right-4 bottom-3 z-10">
+            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
               <div className="pointer-events-auto">
                 <JumpToLatestButton
                   onClick={() => {
