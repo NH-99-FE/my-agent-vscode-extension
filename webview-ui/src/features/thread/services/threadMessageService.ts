@@ -45,6 +45,22 @@ export function buildChatSendMessage(input: SendChatInput): WebviewToExtensionMe
 }
 
 /**
+ * 统一组装 `chat.cancel` 消息
+ * @param sessionId 要取消的会话 ID
+ * @param requestId 可选请求 ID（命中当前 active request 时透传）
+ * @returns 组装好的消息对象
+ */
+export function buildChatCancelMessage(sessionId: string, requestId?: string): WebviewToExtensionMessage {
+  return {
+    type: 'chat.cancel',
+    ...(requestId !== undefined ? { requestId } : {}),
+    payload: {
+      sessionId,
+    },
+  }
+}
+
+/**
  * 统一组装 `context.files.pick` 请求消息
  * @param maxCount 最大文件数量
  * @param requestId 请求 ID，用于回包关联

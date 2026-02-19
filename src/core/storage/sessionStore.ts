@@ -96,7 +96,8 @@ export class SessionStore {
     }
 
     const lastMessage = session.messages[session.messages.length - 1]
-    if (lastMessage?.role === 'assistant') {
+    // 仅拼接“未结束”的助手消息；已结束消息需要开启新消息，避免串轮次。
+    if (lastMessage?.role === 'assistant' && lastMessage.finishReason === undefined) {
       lastMessage.content += delta
       lastMessage.timestamp = now
     } else {
@@ -121,10 +122,34 @@ export class SessionStore {
       role: 'assistant',
       content: `[error] ${message}`,
       timestamp: now,
+      finishReason: 'error',
     })
     session.updatedAt = now
 
     await this.saveSessions(nextSessions)
+    return session
+  }
+
+  async setLastAssistantFinishReason(
+    sessionId: string,
+    finishReason: NonNullable<ChatMessage['finishReason']>
+  ): Promise<ChatSession | undefined> {
+    const now = Date.now()
+    const sessions = await this.getSessions()
+    const session = sessions.find(item => item.id === sessionId)
+    if (!session) {
+      return undefined
+    }
+
+    const lastAssistant = findLastPendingAssistantMessage(session.messages)
+    if (!lastAssistant) {
+      return session
+    }
+
+    lastAssistant.finishReason = finishReason
+    lastAssistant.timestamp = now
+    session.updatedAt = now
+    await this.saveSessions(sessions)
     return session
   }
 
@@ -188,4 +213,17 @@ function toSessionTitle(text: string): string {
     return normalized
   }
   return `${normalized.slice(0, maxLen)}...`
+}
+
+function findLastPendingAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (!message) {
+      continue
+    }
+    if (message.role === 'assistant' && message.finishReason === undefined) {
+      return message
+    }
+  }
+  return undefined
 }

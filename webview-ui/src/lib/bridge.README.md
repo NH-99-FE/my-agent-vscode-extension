@@ -80,6 +80,15 @@ function Demo() {
 - `finishReason = 'stop' | 'length'`：清空附件
 - `finishReason = 'cancelled' | 'error'`：保留附件，方便重试
 
+## 5.2 后端上下文拼装过滤规则（固定）
+
+后端在“会话历史 -> provider 输入”阶段按固定规则过滤消息（无开关）：
+
+- `user` 消息：始终进入 context
+- `assistant` 且 `finishReason = 'stop' | 'length'`：进入 context
+- `assistant` 且 `finishReason = 'cancelled' | 'error'`：不进入 context
+- `assistant` 缺失 `finishReason`（历史旧数据）：默认不进入 context（保守策略）
+
 ## 6. 运行环境说明
 
 `bridge` 依赖 VS Code 注入的 `acquireVsCodeApi()`。

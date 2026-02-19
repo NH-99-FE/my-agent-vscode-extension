@@ -28,6 +28,7 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool' // 消息角色
   content: string // 消息内容
   timestamp: number // Unix 毫秒时间戳
+  finishReason?: 'stop' | 'length' | 'cancelled' | 'error' // assistant 结束原因（用于上下文过滤）
 }
 
 // 会话聚合结构，供持久化与恢复使用

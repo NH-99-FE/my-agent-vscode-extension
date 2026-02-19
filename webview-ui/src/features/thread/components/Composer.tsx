@@ -1,7 +1,6 @@
 import type { ReasoningLevel } from '@agent/types'
-import { Box, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus } from 'lucide-react'
+import { ArrowUp, Box, BrainCircuit, BrainCog, BrainIcon, Leaf, Plus, Square } from 'lucide-react'
 import { IconTooltip } from '@/components/common/IconTooltip'
-import { ArrowUp } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { OptionSelect } from '@/components/common/OptionSelect'
@@ -9,6 +8,7 @@ import { AddContextFiles, type ContextFileItem } from './AddContextFiles'
 import { bridge } from '@/lib/bridge'
 import { useNavigate } from 'react-router'
 import {
+  buildChatCancelMessage,
   buildChatSendMessage,
   buildContextFilesPickMessage,
   getContextFilesLimitNotice,
@@ -20,6 +20,7 @@ import {
   useThreadComposerActions,
   useThreadComposerAttachments,
   useThreadComposerCanSend,
+  useThreadComposerIsSending,
   useThreadComposerInlineNotice,
   useThreadComposerModel,
   useThreadComposerReasoningLevel,
@@ -68,6 +69,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     return fallback ? [fallback] : []
   }, [settingsDefaultModel, settingsModelsText])
   const canSend = useThreadComposerCanSend()
+  const isSending = useThreadComposerIsSending()
   const {
     initSession,
     setText,
@@ -225,6 +227,12 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     }
   }
 
+  const handlePause = () => {
+    setSending(sessionId, false)
+    const activeRequestId = getActiveAssistantRequestId(sessionId)
+    bridge.send(buildChatCancelMessage(sessionId, activeRequestId))
+  }
+
   return (
     <div className="relative mx-3 my-2 flex flex-col rounded-xl border border-border bg-card p-2 text-card-foreground shadow-xs">
       <AddContextFiles
@@ -282,20 +290,22 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
       </div>
       {activeInlineNotice ? <p className="mt-1 px-1 text-xs text-destructive">{activeInlineNotice}</p> : null}
       <div className="absolute right-2 bottom-1.5">
-        <IconTooltip tipText="发送消息" hasBackground={true}>
+        <IconTooltip tipText={isSending ? '暂停生成' : '发送消息'} hasBackground={true}>
           <button
             type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            aria-label="发送消息"
+            onClick={isSending ? handlePause : handleSend}
+            disabled={isSending ? false : !canSend}
+            aria-label={isSending ? '暂停生成' : '发送消息'}
             className={cn(
               'rounded-full p-1 transition-colors duration-150',
-              canSend
-                ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90'
-                : 'cursor-not-allowed bg-muted text-muted-foreground'
+              isSending
+                ? 'cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                : canSend
+                  ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'cursor-not-allowed bg-muted text-muted-foreground'
             )}
           >
-            <ArrowUp className="h-6 w-6" />
+            {isSending ? <Square className="h-6 w-6" /> : <ArrowUp className="h-6 w-6" />}
           </button>
         </IconTooltip>
       </div>

@@ -12,6 +12,7 @@ const llmClient = createLlmClient()
 // 进行中的请求信息
 interface InFlightRequest {
   controller: LlmCancellationController
+  requestId: string
 }
 
 /**
@@ -57,7 +58,7 @@ export function registerWebviewMessageHandler(panel: vscode.WebviewPanel, contex
           await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
           break
         case 'chat.cancel':
-          await handleChatCancel(panel, parsedMessage, inFlightBySession)
+          await handleChatCancel(parsedMessage, inFlightBySession)
           break
         case 'context.files.pick':
           await handleContextFilesPick(panel, parsedMessage)
@@ -112,6 +113,7 @@ async function handleChatSend(
   const controller = new LlmCancellationController()
   inFlightBySession.set(message.payload.sessionId, {
     controller,
+    requestId: message.requestId,
   })
 
   try {
@@ -197,13 +199,16 @@ async function handleChatSend(
 }
 
 async function handleChatCancel(
-  panel: vscode.WebviewPanel,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.cancel' }>,
   inFlightBySession: Map<string, InFlightRequest>
 ): Promise<void> {
   const inFlight = inFlightBySession.get(message.payload.sessionId)
   if (!inFlight) {
-    await postSystemError(panel, `No running request for session ${message.payload.sessionId}.`, message.requestId)
+    // 取消请求幂等化：无进行中请求时静默返回，避免竞态产生误报。
+    return
+  }
+  // 当 cancel 携带 requestId 时，仅允许取消命中的 active 请求，避免旧 cancel 误杀新流。
+  if (message.requestId !== undefined && message.requestId !== inFlight.requestId) {
     return
   }
 

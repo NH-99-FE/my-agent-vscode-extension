@@ -1,4 +1,4 @@
-import type { ChatAttachment, ContextSnippet, ReasoningLevel } from '@agent/types'
+import type { ChatAttachment, ChatMessage, ContextSnippet, ReasoningLevel } from '@agent/types'
 import * as vscode from 'vscode'
 import type { LlmCancellationSignal, LlmChatMessage, LlmClient, LlmStreamEvent } from '../llm/client'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmProvider } from '../llm/client'
@@ -91,12 +91,14 @@ export class ChatService {
             await this.sessionStore.appendAssistantError(request.sessionId, event.message)
             break
           case 'done':
+            await this.sessionStore.setLastAssistantFinishReason(request.sessionId, event.finishReason)
             break
         }
         yield event
       }
     } catch (error) {
       if (error instanceof LlmAbortError) {
+        await this.sessionStore.setLastAssistantFinishReason(request.sessionId, 'cancelled')
         throw error
       }
 
@@ -299,10 +301,7 @@ async function buildLlmMessagesForCurrentTurn(
       return [{ role: 'user', content: currentPromptWithContext }]
     }
 
-    const historyMessages = session.messages
-      .filter(message => message.role === 'user' || message.role === 'assistant')
-      .filter(message => !(message.role === 'assistant' && message.content.startsWith('[error] ')))
-      .map<LlmChatMessage>(message => ({
+    const historyMessages = session.messages.filter(shouldIncludeInContext).map<LlmChatMessage>(message => ({
         role: message.role,
         content: message.content,
       }))
@@ -324,4 +323,25 @@ async function buildLlmMessagesForCurrentTurn(
     // 历史读取异常时降级为单轮模式，保证主链路可用
     return [{ role: 'user', content: currentPromptWithContext }]
   }
+}
+
+function shouldIncludeInContext(message: ChatMessage): message is ChatMessage & { role: 'user' | 'assistant' } {
+  if (message.role === 'user') {
+    return true
+  }
+
+  if (message.role !== 'assistant') {
+    return false
+  }
+
+  if (message.finishReason === 'stop' || message.finishReason === 'length') {
+    return true
+  }
+
+  if (message.finishReason === 'cancelled' || message.finishReason === 'error') {
+    return false
+  }
+
+  // 旧数据或异常数据缺失 finishReason 时，保守不注入上下文。
+  return false
 }
