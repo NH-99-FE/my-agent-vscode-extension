@@ -11,10 +11,8 @@ import {
   buildHistoryTitleFromMessages,
   buildChatHistoryGetMessage,
   buildCreateSessionMessage,
-  buildSettingsApiKeyDeleteMessage,
-  buildSettingsApiKeySetMessage,
   buildSettingsGetMessage,
-  buildSettingsUpdateMessage,
+  buildSettingsSaveMessage,
   handleThreadWorkspaceMessage,
 } from '@/features/thread/services/threadWorkspaceService'
 import {
@@ -62,7 +60,6 @@ export function WorkspaceLayout() {
   const settingsRequestOrderRef = useRef(0)
   const settingsRequestIndexByIdRef = useRef(new Map<string, number>())
   const latestAppliedSettingsOrderRef = useRef(0)
-  const pendingSettingsMutationRequestIdsRef = useRef(new Set<string>())
   const pendingSessionGetByRequestIdRef = useRef(new Map<string, string>())
   const pendingSessionGetSessionIdsRef = useRef(new Set<string>())
   const {
@@ -88,10 +85,6 @@ export function WorkspaceLayout() {
   const trackSettingsRequest = useCallback((requestId: string): void => {
     settingsRequestOrderRef.current += 1
     settingsRequestIndexByIdRef.current.set(requestId, settingsRequestOrderRef.current)
-  }, [])
-
-  const markPendingSettingsMutation = useCallback((requestId: string): void => {
-    pendingSettingsMutationRequestIdsRef.current.add(requestId)
   }, [])
 
   const shouldApplySettingsResponse = useCallback((requestId?: string): boolean => {
@@ -160,24 +153,23 @@ export function WorkspaceLayout() {
 
     const requestId = crypto.randomUUID()
     trackSettingsRequest(requestId)
-    markPendingSettingsMutation(requestId)
     beginSettingsSave()
-    bridge.send(
-      buildSettingsUpdateMessage(requestId, settingsProviderDefault, settingsOpenaiBaseUrl, normalizedDefaultModel, normalizedModels)
-    )
-
     const normalizedApiKey = settingsApiKeyInput.trim()
+    bridge.send(
+      buildSettingsSaveMessage(requestId, {
+        providerDefault: settingsProviderDefault,
+        openaiBaseUrl: settingsOpenaiBaseUrl,
+        openaiDefaultModel: normalizedDefaultModel,
+        openaiModels: normalizedModels,
+        ...(normalizedApiKey ? { openaiApiKey: normalizedApiKey } : {}),
+      })
+    )
     if (normalizedApiKey) {
-      const apiKeyRequestId = crypto.randomUUID()
-      trackSettingsRequest(apiKeyRequestId)
-      markPendingSettingsMutation(apiKeyRequestId)
-      bridge.send(buildSettingsApiKeySetMessage(apiKeyRequestId, normalizedApiKey))
       clearSettingsApiKeyInput()
     }
   }, [
     beginSettingsSave,
     clearSettingsApiKeyInput,
-    markPendingSettingsMutation,
     settingsApiKeyInput,
     setSettingsError,
     settingsDefaultModel,
@@ -195,14 +187,16 @@ export function WorkspaceLayout() {
     }
     const requestId = crypto.randomUUID()
     trackSettingsRequest(requestId)
-    markPendingSettingsMutation(requestId)
     beginSettingsSave()
-    bridge.send(buildSettingsApiKeySetMessage(requestId, normalizedApiKey))
+    bridge.send(
+      buildSettingsSaveMessage(requestId, {
+        openaiApiKey: normalizedApiKey,
+      })
+    )
     clearSettingsApiKeyInput()
   }, [
     beginSettingsSave,
     clearSettingsApiKeyInput,
-    markPendingSettingsMutation,
     setSettingsError,
     settingsApiKeyInput,
     trackSettingsRequest,
@@ -211,11 +205,14 @@ export function WorkspaceLayout() {
   const deleteApiKey = useCallback(() => {
     const requestId = crypto.randomUUID()
     trackSettingsRequest(requestId)
-    markPendingSettingsMutation(requestId)
     beginSettingsSave()
-    bridge.send(buildSettingsApiKeyDeleteMessage(requestId))
+    bridge.send(
+      buildSettingsSaveMessage(requestId, {
+        deleteOpenAiApiKey: true,
+      })
+    )
     clearSettingsApiKeyInput()
-  }, [beginSettingsSave, clearSettingsApiKeyInput, markPendingSettingsMutation, trackSettingsRequest])
+  }, [beginSettingsSave, clearSettingsApiKeyInput, trackSettingsRequest])
 
   // 详情页返回：先写入本地历史摘要，再回到首页。
   const handleBackToHomeFromDetail = useCallback(() => {
@@ -251,10 +248,6 @@ export function WorkspaceLayout() {
             return
           }
           applySettingsSnapshot(snapshot)
-          if (requestId && pendingSettingsMutationRequestIdsRef.current.has(requestId)) {
-            pendingSettingsMutationRequestIdsRef.current.delete(requestId)
-            requestSettings()
-          }
         },
         onSystemError: (errorMessage, requestId) => {
           if (requestId) {
@@ -265,9 +258,6 @@ export function WorkspaceLayout() {
               setSessionError(pendingSessionId, errorMessage)
               return
             }
-          }
-          if (requestId) {
-            pendingSettingsMutationRequestIdsRef.current.delete(requestId)
           }
           setSettingsError(errorMessage)
         },

@@ -54,7 +54,15 @@ export const SettingsPanel = ({
   const disableActions = loading || saving
 
   return (
-    <div className="flex max-h-120 flex-col rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg">
+    <div className="relative flex max-h-120 flex-col rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg">
+      {loading ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/60">
+          <p className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-xs">
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            正在读取设置...
+          </p>
+        </div>
+      ) : null}
       <div className="mb-3 flex items-center justify-between">
         <div className="inline-flex items-center gap-2">
           <Settings2 className="h-4 w-4 text-muted-foreground" />
@@ -187,12 +195,6 @@ export const SettingsPanel = ({
         <div className="space-y-1">
           {error ? (
             <p className="rounded-md border border-destructive/35 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">{error}</p>
-          ) : null}
-          {loading ? (
-            <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              正在读取设置...
-            </p>
           ) : null}
           {saving ? (
             <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

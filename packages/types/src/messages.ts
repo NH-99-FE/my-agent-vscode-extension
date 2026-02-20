@@ -71,28 +71,17 @@ export interface SettingsGetMessage extends MessageMeta {
   type: 'settings.get' // 消息类型
 }
 
-// 前端 -> 扩展：更新设置项（部分字段更新）
-export interface SettingsUpdateMessage extends MessageMeta {
-  type: 'settings.update' // 消息类型
+// 前端 -> 扩展：原子保存设置与 API Key（单次提交）
+export interface SettingsSaveMessage extends MessageMeta {
+  type: 'settings.save' // 消息类型
   payload: {
     providerDefault?: ProviderDefault // 可选的默认 provider
     openaiBaseUrl?: string // 可选的 OpenAI 基础 URL
     openaiDefaultModel?: string // 可选的 OpenAI 默认模型
     openaiModels?: string[] // 可选的 OpenAI 模型列表
+    openaiApiKey?: string // 可选：写入 OpenAI API Key
+    deleteOpenAiApiKey?: boolean // 可选：删除 OpenAI API Key（与 openaiApiKey 互斥）
   }
-}
-
-// 前端 -> 扩展：写入 OpenAI API Key
-export interface SettingsApiKeySetMessage extends MessageMeta {
-  type: 'settings.apiKey.set' // 消息类型
-  payload: {
-    apiKey: string // 要设置的 API Key
-  }
-}
-
-// 前端 -> 扩展：删除 OpenAI API Key
-export interface SettingsApiKeyDeleteMessage extends MessageMeta {
-  type: 'settings.apiKey.delete' // 消息类型
 }
 
 // 前端 -> 扩展：创建新会话
@@ -258,9 +247,7 @@ export type WebviewToExtensionMessage =
   | ContextEditorStateSubscribeMessage
   | ContextEditorStateUnsubscribeMessage
   | SettingsGetMessage
-  | SettingsUpdateMessage
-  | SettingsApiKeySetMessage
-  | SettingsApiKeyDeleteMessage
+  | SettingsSaveMessage
   | ChatSessionCreateMessage
   | ChatSessionGetMessage
   | ChatHistoryGetMessage

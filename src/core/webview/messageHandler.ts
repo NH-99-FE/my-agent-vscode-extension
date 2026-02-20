@@ -120,14 +120,8 @@ export function registerWebviewMessageHandler(panel: WebviewHost, context: vscod
         case 'settings.get':
           await handleSettingsGet(panel, parsedMessage, settingsService)
           break
-        case 'settings.update':
-          await handleSettingsUpdate(panel, parsedMessage, settingsService)
-          break
-        case 'settings.apiKey.set':
-          await handleSettingsApiKeySet(panel, parsedMessage, settingsService)
-          break
-        case 'settings.apiKey.delete':
-          await handleSettingsApiKeyDelete(panel, parsedMessage, settingsService)
+        case 'settings.save':
+          await handleSettingsSave(panel, parsedMessage, settingsService)
           break
         case 'chat.session.create':
           await handleChatSessionCreate(panel, parsedMessage, sessionService)
@@ -345,38 +339,12 @@ function handleContextEditorStateUnsubscribe(disposeSubscription: () => void): v
   disposeSubscription()
 }
 
-async function handleSettingsUpdate(
+async function handleSettingsSave(
   panel: WebviewHost,
-  message: Extract<WebviewToExtensionMessage, { type: 'settings.update' }>,
+  message: Extract<WebviewToExtensionMessage, { type: 'settings.save' }>,
   settingsService: SettingsService
 ): Promise<void> {
-  const state = await settingsService.updateSettings(message.payload)
-  await postTypedMessage(panel, {
-    type: 'settings.state',
-    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
-    payload: state,
-  })
-}
-
-async function handleSettingsApiKeySet(
-  panel: WebviewHost,
-  message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.set' }>,
-  settingsService: SettingsService
-): Promise<void> {
-  const state = await settingsService.setOpenAiApiKey(message.payload.apiKey)
-  await postTypedMessage(panel, {
-    type: 'settings.state',
-    ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
-    payload: state,
-  })
-}
-
-async function handleSettingsApiKeyDelete(
-  panel: WebviewHost,
-  message: Extract<WebviewToExtensionMessage, { type: 'settings.apiKey.delete' }>,
-  settingsService: SettingsService
-): Promise<void> {
-  const state = await settingsService.deleteOpenAiApiKey()
+  const state = await settingsService.saveSettings(message.payload)
   await postTypedMessage(panel, {
     type: 'settings.state',
     ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
@@ -627,7 +595,7 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       }
       return settingsGetMessage
     }
-    case 'settings.update': {
+    case 'settings.save': {
       if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
         return undefined
       }
@@ -637,6 +605,8 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       const openaiBaseUrl = asString(payload.openaiBaseUrl)
       const openaiDefaultModel = asString(payload.openaiDefaultModel)
       const openaiModels = asStringArray(payload.openaiModels)
+      const openaiApiKey = asNonEmptyString(payload.openaiApiKey)
+      const deleteOpenAiApiKey = asOptionalBoolean(payload.deleteOpenAiApiKey)
       if (payload.providerDefault !== undefined && providerDefault === undefined) {
         return undefined
       }
@@ -649,52 +619,39 @@ function parseInboundMessage(value: unknown): WebviewToExtensionMessage | undefi
       if (payload.openaiModels !== undefined && openaiModels === undefined) {
         return undefined
       }
-      if (providerDefault === undefined && openaiBaseUrl === undefined && openaiDefaultModel === undefined && openaiModels === undefined) {
+      if (payload.openaiApiKey !== undefined && openaiApiKey === undefined) {
+        return undefined
+      }
+      if (payload.deleteOpenAiApiKey !== undefined && deleteOpenAiApiKey === undefined) {
+        return undefined
+      }
+      const hasAnySaveField =
+        providerDefault !== undefined ||
+        openaiBaseUrl !== undefined ||
+        openaiDefaultModel !== undefined ||
+        openaiModels !== undefined ||
+        openaiApiKey !== undefined ||
+        deleteOpenAiApiKey === true
+      if (!hasAnySaveField) {
+        return undefined
+      }
+      if (openaiApiKey !== undefined && deleteOpenAiApiKey === true) {
         return undefined
       }
 
-      const settingsUpdateMessage: WebviewToExtensionMessage = {
-        type: 'settings.update',
+      const settingsSaveMessage: WebviewToExtensionMessage = {
+        type: 'settings.save',
         ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
         payload: {
           ...(providerDefault !== undefined ? { providerDefault } : {}),
           ...(openaiBaseUrl !== undefined ? { openaiBaseUrl } : {}),
           ...(openaiDefaultModel !== undefined ? { openaiDefaultModel } : {}),
           ...(openaiModels !== undefined ? { openaiModels } : {}),
+          ...(openaiApiKey !== undefined ? { openaiApiKey } : {}),
+          ...(deleteOpenAiApiKey === true ? { deleteOpenAiApiKey: true } : {}),
         },
       }
-      return settingsUpdateMessage
-    }
-    case 'settings.apiKey.set': {
-      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
-        return undefined
-      }
-
-      const payload = maybeMessage.payload as Record<string, unknown>
-      const apiKey = asNonEmptyString(payload.apiKey)
-      if (!apiKey) {
-        return undefined
-      }
-
-      const settingsApiKeySetMessage: WebviewToExtensionMessage = {
-        type: 'settings.apiKey.set',
-        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
-        payload: {
-          apiKey,
-        },
-      }
-      return settingsApiKeySetMessage
-    }
-    case 'settings.apiKey.delete': {
-      if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {
-        return undefined
-      }
-
-      const settingsApiKeyDeleteMessage: WebviewToExtensionMessage = {
-        type: 'settings.apiKey.delete',
-        ...(maybeMessage.requestId !== undefined ? { requestId: maybeMessage.requestId } : {}),
-      }
-      return settingsApiKeyDeleteMessage
+      return settingsSaveMessage
     }
     case 'chat.session.create': {
       if (maybeMessage.payload !== undefined && !isEmptyObject(maybeMessage.payload)) {

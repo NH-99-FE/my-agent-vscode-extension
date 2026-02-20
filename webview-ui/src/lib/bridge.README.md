@@ -20,7 +20,7 @@
 
 当前常用类型：
 
-- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`、`context.editor.state.subscribe`、`context.editor.state.unsubscribe`、`chat.session.create`、`settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`
+- 前端发：`ping`、`chat.send`、`chat.cancel`、`context.files.pick`、`context.editor.state.subscribe`、`context.editor.state.unsubscribe`、`chat.session.create`、`settings.get`、`settings.save`
 - 后端回：`pong`、`system.ready`、`system.error`、`chat.delta`、`chat.done`、`chat.error`、`context.files.picked`、`context.editor.state`、`chat.session.created`、`settings.state`
 
 `settings.state` 在当前联调中除了基础字段外，可能包含模型配置字段（如 `defaultModel`、`models`），前端会做兼容消费。

@@ -11,12 +11,14 @@ export interface SettingsState {
   openaiModels: string[] // OpenAI 可用模型列表
 }
 
-// 设置更新输入接口
-export interface SettingsUpdateInput {
+// 设置保存输入接口（原子保存）
+export interface SettingsSaveInput {
   providerDefault?: ProviderDefault // 默认 provider
   openaiBaseUrl?: string // OpenAI 基础 URL
   openaiDefaultModel?: string // OpenAI 默认模型
   openaiModels?: string[] // OpenAI 可用模型列表
+  openaiApiKey?: string // OpenAI API Key（设置）
+  deleteOpenAiApiKey?: boolean // 是否删除 OpenAI API Key
 }
 
 /**
@@ -51,12 +53,17 @@ export class SettingsService {
   }
 
   /**
-   * 更新设置
-   * @param input 设置更新输入
+   * 原子保存设置
+   * @param input 设置保存输入
    * @returns 更新后的设置状态
    */
-  async updateSettings(input: SettingsUpdateInput): Promise<SettingsState> {
+  async saveSettings(input: SettingsSaveInput): Promise<SettingsState> {
     const config = vscode.workspace.getConfiguration('agent')
+    const normalizedApiKey = input.openaiApiKey?.trim()
+    const shouldDeleteApiKey = input.deleteOpenAiApiKey === true
+    if (normalizedApiKey && shouldDeleteApiKey) {
+      throw new Error('openaiApiKey and deleteOpenAiApiKey cannot be provided together.')
+    }
 
     if (input.providerDefault !== undefined) {
       await config.update('provider.default', input.providerDefault, true)
@@ -71,26 +78,12 @@ export class SettingsService {
     if (input.openaiModels !== undefined) {
       await config.update('openai.models', normalizeModelList(input.openaiModels), true)
     }
+    if (normalizedApiKey) {
+      await setOpenAIApiKey(this.context, normalizedApiKey)
+    } else if (shouldDeleteApiKey) {
+      await deleteOpenAIApiKey(this.context)
+    }
 
-    return this.getState()
-  }
-
-  /**
-   * 设置 OpenAI API Key
-   * @param apiKey API Key
-   * @returns 更新后的设置状态
-   */
-  async setOpenAiApiKey(apiKey: string): Promise<SettingsState> {
-    await setOpenAIApiKey(this.context, apiKey)
-    return this.getState()
-  }
-
-  /**
-   * 删除 OpenAI API Key
-   * @returns 更新后的设置状态
-   */
-  async deleteOpenAiApiKey(): Promise<SettingsState> {
-    await deleteOpenAIApiKey(this.context)
     return this.getState()
   }
 }

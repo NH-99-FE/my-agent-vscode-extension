@@ -60,7 +60,7 @@
 - 扩展入口与命令激活：已实现 `agent.openChat`，可激活扩展并打开面板。
 - Webview 面板层：已实现面板创建/复用、`media/index.html` 注入、静态资源路径改写、CSP 注入与 fallback 页面。
 - 消息协议层：已在 `packages/types/src/messages.ts` 定义 Webview <-> Extension 协议，包含 `ping`、`chat.send`、`chat.cancel`、`chat.delta`、`chat.done`、`chat.error`、`system.ready`、`system.error`，并新增上下文文件选择通道 `context.files.pick`、`context.files.picked`、历史/会话通道 `chat.history.get`、`chat.history.delete`、`chat.history.list`、`chat.session.get`、`chat.session.state`。其中 `chat.send` 已扩展并收敛字段：`model`、`reasoningLevel`、`attachments`，且 `requestId` 在类型层与运行时均为必填约束。
-- 设置/会话协议层：已新增 `settings.get`、`settings.update`、`settings.apiKey.set`、`settings.apiKey.delete`、`chat.session.create`、`chat.session.get`、`chat.history.delete` 入站消息，以及 `settings.state`、`chat.session.created`、`chat.session.state`、`chat.history.list` 出站消息。
+- 设置/会话协议层：已新增 `settings.get`、`settings.save`、`chat.session.create`、`chat.session.get`、`chat.history.delete` 入站消息，以及 `settings.state`、`chat.session.created`、`chat.session.state`、`chat.history.list` 出站消息。
 - 消息路由层：`messageHandler` 已实现入站消息严格校验、类型分发、统一错误回包；`chat.send` 新字段与必填 `requestId` 已纳入 runtime 严格校验并透传到流式回包。`context.files.pick/picked` 已补齐 requestId 显式透传约束（按字段存在与否透传，不依赖 truthy）。`chat.history.delete` 支持删除后回包最新 `chat.history.list`，`chat.session.get` 支持按 sessionId 回包 `chat.session.state`（找不到返回 null）。
 - LLM 流式层：已完成 provider 抽象（adapter + registry + 统一错误归一化），并接入 `mock/openai` 双通道，支持流式输出事件（delta/done/error）。
 - 运行控制：已支持同会话并发覆盖、用户取消（`chat.cancel`）、超时、重试。
@@ -79,7 +79,7 @@
 - 可完整打通 `chat.send -> 流式 delta -> done/error` 链路。
 - 可在 `chat.send` 中携带模型、推理强度、附件上下文并完成后端消费。
 - 可通过后端配置切换到 OpenAI 并保持协议输出不变（`chat.delta/chat.done/chat.error`）。
-- 可通过 `settings.get/settings.update/settings.apiKey.*` 完成设置面板所需后端状态读取与更新闭环。
+- 可通过 `settings.get/settings.save` 完成设置面板所需后端状态读取与更新闭环。
 - 可通过 `chat.session.create` 返回新会话 ID 用于前端“新会话”入口。
 - 可通过 `chat.session.get -> chat.session.state` 按会话懒加载恢复历史消息（跨重启恢复）。
 - 可通过 `chat.history.delete` 删除持久化会话并刷新历史列表。
@@ -165,7 +165,7 @@
   - 调用 `vscode.window.showOpenDialog`
   - 回包 `context.files.picked` 并透传同一 `requestId`（用于前端 pending map 稳定命中）
 - 已新增设置与会话创建通道处理：
-  - 处理 `settings.get/settings.update/settings.apiKey.set/settings.apiKey.delete`
+  - 处理 `settings.get/settings.save`
   - 回包 `settings.state`（`providerDefault/openaiBaseUrl/hasOpenAiApiKey/openaiDefaultModel/openaiModels`）
   - 处理 `chat.session.create` 并回包 `chat.session.created`
 - LLM 流式链路已打通（mock provider），支持 delta/done/error、取消、超时、重试。

@@ -1,10 +1,4 @@
-import type {
-  ChatSessionStateMessage,
-  ExtensionToWebviewMessage,
-  ProviderDefault,
-  SettingsStateMessage,
-  WebviewToExtensionMessage,
-} from '@agent/types'
+import type { ChatSessionStateMessage, ExtensionToWebviewMessage, SettingsStateMessage, WebviewToExtensionMessage } from '@agent/types'
 
 // 线程工作区消息操作接口
 type ThreadWorkspaceMessageActions = {
@@ -65,66 +59,28 @@ export function buildSettingsGetMessage(requestId: string): WebviewToExtensionMe
   }
 }
 
+type SettingsSavePayload = Extract<WebviewToExtensionMessage, { type: 'settings.save' }>['payload']
+
 /**
- * 构建更新设置消息
+ * 构建原子保存设置消息
  * @param requestId 请求 ID
- * @param providerDefault 默认 provider
- * @param openaiBaseUrl OpenAI 基础 URL
- * @param defaultModel 默认模型
- * @param models 模型列表
- * @returns 更新设置消息对象
+ * @param payload 设置保存负载
+ * @returns 设置保存消息对象
  */
-export function buildSettingsUpdateMessage(
-  requestId: string,
-  providerDefault: ProviderDefault,
-  openaiBaseUrl: string,
-  defaultModel: string,
-  models: string[]
-): WebviewToExtensionMessage {
-  const normalizedDefaultModel = defaultModel.trim()
-  const normalizedModels = models.map(item => item.trim()).filter(Boolean)
-  const basePayload: Extract<WebviewToExtensionMessage, { type: 'settings.update' }>['payload'] = {
-    providerDefault,
-    openaiBaseUrl,
-  }
-  const payload = {
-    ...basePayload,
-    ...(normalizedDefaultModel ? { openaiDefaultModel: normalizedDefaultModel } : {}),
-    ...(normalizedModels.length > 0 ? { openaiModels: normalizedModels } : {}),
+export function buildSettingsSaveMessage(requestId: string, payload: SettingsSavePayload): WebviewToExtensionMessage {
+  const normalizedPayload: SettingsSavePayload = {
+    ...(payload.providerDefault !== undefined ? { providerDefault: payload.providerDefault } : {}),
+    ...(payload.openaiBaseUrl !== undefined ? { openaiBaseUrl: payload.openaiBaseUrl.trim() } : {}),
+    ...(payload.openaiDefaultModel !== undefined ? { openaiDefaultModel: payload.openaiDefaultModel.trim() } : {}),
+    ...(payload.openaiModels !== undefined ? { openaiModels: payload.openaiModels.map(item => item.trim()).filter(Boolean) } : {}),
+    ...(payload.openaiApiKey !== undefined ? { openaiApiKey: payload.openaiApiKey.trim() } : {}),
+    ...(payload.deleteOpenAiApiKey === true ? { deleteOpenAiApiKey: true } : {}),
   }
 
   return {
-    type: 'settings.update',
+    type: 'settings.save',
     requestId,
-    payload,
-  }
-}
-
-/**
- * 构建设置 API Key 消息
- * @param requestId 请求 ID
- * @param apiKey API Key
- * @returns 设置 API Key 消息对象
- */
-export function buildSettingsApiKeySetMessage(requestId: string, apiKey: string): WebviewToExtensionMessage {
-  return {
-    type: 'settings.apiKey.set',
-    requestId,
-    payload: {
-      apiKey,
-    },
-  }
-}
-
-/**
- * 构建删除 API Key 消息
- * @param requestId 请求 ID
- * @returns 删除 API Key 消息对象
- */
-export function buildSettingsApiKeyDeleteMessage(requestId: string): WebviewToExtensionMessage {
-  return {
-    type: 'settings.apiKey.delete',
-    requestId,
+    payload: normalizedPayload,
   }
 }
 
