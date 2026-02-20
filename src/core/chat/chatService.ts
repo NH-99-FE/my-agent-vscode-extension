@@ -1,6 +1,6 @@
 import type { ChatAttachment, ReasoningLevel } from '@agent/types'
 import * as vscode from 'vscode'
-import type { LlmCancellationSignal, LlmClient, LlmStreamEvent } from '../llm/client'
+import type { LlmCancellationSignal, LlmChatMessage, LlmClient, LlmStreamEvent, LlmToolCall } from '../llm/client'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError, type LlmProvider } from '../llm/client'
 import { buildAttachmentContext } from '../context/attachmentContext'
 import { buildContextFromActiveEditor } from '../context/contextBuilder'
@@ -8,6 +8,9 @@ import { createUnknownProviderError, formatLlmProviderError } from '../llm/error
 import { buildLlmMessagesForCurrentTurn } from '../prompt/promptService'
 import { getOpenAIApiKey, hasOpenAIApiKey } from '../storage/secrets'
 import { SessionStore } from '../storage/sessionStore'
+import { createDefaultToolRegistry } from '../tools/defaultTools'
+import { ToolExecutor } from '../tools/toolExecutor'
+import type { ToolExecutionContext } from '../tools/toolTypes'
 
 // 聊天服务请求参数
 export interface ChatServiceRequest {
@@ -31,12 +34,21 @@ interface ChatServiceOptions {
 
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 const DEFAULT_HARD_TIMEOUT_MS = 15 * 60_000
+const MAX_TOOL_CALLS_PER_TURN = 1
+const TOOL_MAX_READ_BYTES = 256 * 1024
+const TOOL_MAX_READ_CHARS = 4000
+const TOOL_MAX_CONTROL_CHAR_RATIO = 0.1
+
+type ToolCallEvent = Extract<LlmStreamEvent, { type: 'tool-call' }>
 
 /**
  * 聊天服务类
  * 负责处理聊天请求的核心业务逻辑
  */
 export class ChatService {
+  private readonly toolRegistry = createDefaultToolRegistry()
+  private readonly toolExecutor = new ToolExecutor(this.toolRegistry)
+
   /**
    * 构造函数
    * @param llmClient LLM 客户端
@@ -63,7 +75,7 @@ export class ChatService {
 
     const editorContext = request.includeActiveEditorContext ? buildContextFromActiveEditor() : { snippets: [] }
     const attachmentContext = await buildAttachmentContext(request.attachments)
-    const llmMessages = await buildLlmMessagesForCurrentTurn({
+    let llmMessages = await buildLlmMessagesForCurrentTurn({
       sessionStore: this.sessionStore,
       sessionId: request.sessionId,
       currentUserText: request.text,
@@ -77,33 +89,72 @@ export class ChatService {
       // provider 选择属于业务策略，固定收敛在 service，避免泄漏到 handler
       provider = await resolveProviderForModel(this.context, request.model)
       const openAiRequestOptions = provider === 'openai' ? await buildOpenAiRequestOptions(this.context) : undefined
-      const stream = this.llmClient.streamChat({
-        provider,
-        model: request.model,
-        reasoningLevel: request.reasoningLevel,
-        sessionId: request.sessionId,
-        ...(openAiRequestOptions ?? {}),
-        messages: llmMessages,
-        idleTimeoutMs: this.options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-        hardTimeoutMs: this.options.hardTimeoutMs ?? this.options.timeoutMs ?? DEFAULT_HARD_TIMEOUT_MS,
-        maxRetries: this.options.maxRetries ?? 1,
-        retryDelayMs: this.options.retryDelayMs ?? 200,
-        ...(signal ? { signal } : {}),
-      })
+      const llmTools = provider === 'openai' ? this.toolRegistry.toLlmToolDefinitions() : []
+      const toolExecutionContext = createToolExecutionContext(signal)
 
-      for await (const event of stream) {
-        switch (event.type) {
-          case 'text-delta':
-            await this.sessionStore.appendAssistantDelta(request.sessionId, event.delta)
-            break
-          case 'error':
-            await this.sessionStore.appendAssistantError(request.sessionId, event.message)
-            break
-          case 'done':
-            await this.sessionStore.setLastAssistantFinishReason(request.sessionId, event.finishReason)
-            break
+      let remainingToolCalls = provider === 'openai' ? MAX_TOOL_CALLS_PER_TURN : 0
+      let enableTools = llmTools.length > 0
+
+      while (true) {
+        const toolCalls: ToolCallEvent[] = []
+        const stream = this.llmClient.streamChat({
+          provider,
+          model: request.model,
+          reasoningLevel: request.reasoningLevel,
+          sessionId: request.sessionId,
+          ...(openAiRequestOptions ?? {}),
+          messages: llmMessages,
+          ...(enableTools ? { tools: llmTools } : {}),
+          idleTimeoutMs: this.options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+          hardTimeoutMs: this.options.hardTimeoutMs ?? this.options.timeoutMs ?? DEFAULT_HARD_TIMEOUT_MS,
+          maxRetries: this.options.maxRetries ?? 1,
+          retryDelayMs: this.options.retryDelayMs ?? 200,
+          ...(signal ? { signal } : {}),
+        })
+
+        for await (const event of stream) {
+          switch (event.type) {
+            case 'text-delta':
+              await this.sessionStore.appendAssistantDelta(request.sessionId, event.delta)
+              yield event
+              break
+            case 'error':
+              await this.sessionStore.appendAssistantError(request.sessionId, event.message)
+              yield event
+              break
+            case 'done':
+              await this.sessionStore.setLastAssistantFinishReason(request.sessionId, event.finishReason)
+              yield event
+              break
+            case 'tool-call':
+              toolCalls.push(event)
+              break
+          }
         }
-        yield event
+
+        if (toolCalls.length === 0) {
+          return
+        }
+
+        if (!enableTools) {
+          throw new Error('Tool call is disabled for this turn.')
+        }
+        if (remainingToolCalls <= 0) {
+          throw new Error('Tool call limit exceeded for this turn.')
+        }
+        if (toolCalls.length > 1) {
+          throw new Error('Only one tool call is allowed per turn.')
+        }
+
+        const toolCall = toolCalls[0]
+        if (!toolCall) {
+          throw new Error('Tool call payload is missing.')
+        }
+
+        remainingToolCalls -= 1
+        enableTools = false
+        const toolResultContent = await this.executeToolCall(toolCall, toolExecutionContext)
+        llmMessages = appendToolResultMessages(llmMessages, toolCall, toolResultContent)
       }
     } catch (error) {
       if (error instanceof LlmAbortError) {
@@ -132,6 +183,76 @@ export class ChatService {
 
   async markUserTurnCancelled(sessionId: string, requestId: string): Promise<void> {
     await this.sessionStore.markUserMessageCancelled(sessionId, requestId)
+  }
+
+  private async executeToolCall(toolCall: ToolCallEvent, context: ToolExecutionContext): Promise<string> {
+    const execution = await this.toolExecutor.execute(
+      {
+        name: toolCall.toolName,
+        callId: toolCall.callId,
+        argumentsJson: toolCall.argumentsJson,
+      },
+      context
+    )
+
+    if (execution.result.ok) {
+      return JSON.stringify({
+        ok: true,
+        tool: execution.name,
+        data: execution.result.data,
+      })
+    }
+
+    return JSON.stringify({
+      ok: false,
+      tool: execution.name,
+      error: {
+        code: execution.result.code,
+        message: execution.result.message,
+      },
+    })
+  }
+}
+
+function appendToolResultMessages(messages: LlmChatMessage[], toolCall: ToolCallEvent, toolResultContent: string): LlmChatMessage[] {
+  const assistantToolCall: LlmToolCall = {
+    id: toolCall.callId,
+    name: toolCall.toolName,
+    argumentsJson: toolCall.argumentsJson,
+  }
+
+  return [
+    ...messages,
+    {
+      role: 'assistant',
+      content: '',
+      toolCalls: [assistantToolCall],
+    },
+    {
+      role: 'tool',
+      content: toolResultContent,
+      toolCallId: toolCall.callId,
+    },
+  ]
+}
+
+function createToolExecutionContext(signal?: LlmCancellationSignal): ToolExecutionContext {
+  const workspaceFolders = (
+    vscode.workspace as unknown as {
+      workspaceFolders?: Array<{
+        uri: vscode.Uri
+      }>
+    }
+  ).workspaceFolders
+  const workspaceRoots = (workspaceFolders ?? []).map(folder => folder.uri.fsPath)
+  return {
+    workspaceRoots,
+    ...(signal ? { signal } : {}),
+    limits: {
+      maxReadBytes: TOOL_MAX_READ_BYTES,
+      maxReadChars: TOOL_MAX_READ_CHARS,
+      maxControlCharRatio: TOOL_MAX_CONTROL_CHAR_RATIO,
+    },
   }
 }
 

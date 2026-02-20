@@ -1,4 +1,4 @@
-import type { LlmChatMessage, LlmStreamEvent, LlmStreamRequest } from '../client'
+import type { LlmChatMessage, LlmStreamEvent, LlmStreamRequest, LlmToolCall } from '../client'
 import { assertNotCancelled, HARD_TIMEOUT_REASON, IDLE_TIMEOUT_REASON } from '../cancellation'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError } from '../errors'
 import type { ProviderAdapter } from './types'
@@ -9,6 +9,19 @@ interface OpenAIClientLike {
       create(params: Record<string, unknown>, options?: Record<string, unknown>): Promise<AsyncIterable<unknown>>
     }
   }
+}
+
+interface ToolCallDelta {
+  index: number
+  id?: string
+  name?: string
+  argumentsChunk?: string
+}
+
+interface ToolCallAccumulator {
+  id?: string
+  name?: string
+  argumentsText: string
 }
 
 export class OpenAIProviderAdapter implements ProviderAdapter {
@@ -46,24 +59,30 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
     })
 
     let finishReason: 'stop' | 'length' | 'cancelled' | 'error' = 'stop'
+    const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
 
     try {
-      const stream = await client.chat.completions.create(
-        {
-          model,
-          stream: true,
-          messages: toOpenAiMessages(request.messages),
-          reasoning_effort: mapReasoningLevel(request.reasoningLevel),
-        },
-        abortController ? { signal: abortController.signal } : undefined
-      )
+      const createParams: Record<string, unknown> = {
+        model,
+        stream: true,
+        messages: toOpenAiMessages(request.messages),
+        reasoning_effort: mapReasoningLevel(request.reasoningLevel),
+      }
+      if (request.tools && request.tools.length > 0) {
+        createParams.tools = request.tools
+        createParams.tool_choice = 'auto'
+      }
+
+      const stream = await client.chat.completions.create(createParams, abortController ? { signal: abortController.signal } : undefined)
 
       for await (const chunk of stream) {
         assertNotCancelled(request.signal)
         const parsed = parseOpenAiChunk(chunk)
-        // 只向上游抛出文本增量，保持与既有 chat.delta 协议一致。
         if (parsed.delta) {
           yield { type: 'text-delta', delta: parsed.delta }
+        }
+        if (parsed.toolCallDeltas.length > 0) {
+          mergeToolCallDeltas(toolCallsByIndex, parsed.toolCallDeltas)
         }
         if (parsed.finishReason) {
           finishReason = parsed.finishReason
@@ -71,6 +90,19 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
       }
 
       assertNotCancelled(request.signal)
+      const toolCalls = resolveToolCalls(toolCallsByIndex)
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          yield {
+            type: 'tool-call',
+            callId: toolCall.id,
+            toolName: toolCall.name,
+            argumentsJson: toolCall.argumentsJson,
+          }
+        }
+        return
+      }
+
       yield { type: 'done', finishReason }
     } catch (error) {
       // SDK/网络/鉴权等错误统一归一化，避免上层分散处理。
@@ -108,12 +140,37 @@ async function createOpenAIClient(apiKey: string, baseUrl?: string): Promise<Ope
   }
 }
 
-function toOpenAiMessages(messages: LlmChatMessage[]): Array<{ role: string; content: string }> {
-  const mapped: Array<{ role: string; content: string }> = []
+function toOpenAiMessages(messages: LlmChatMessage[]): Array<Record<string, unknown>> {
+  const mapped: Array<Record<string, unknown>> = []
   for (const message of messages) {
     if (message.role === 'tool') {
+      if (!message.toolCallId) {
+        continue
+      }
+      mapped.push({
+        role: 'tool',
+        content: message.content,
+        tool_call_id: message.toolCallId,
+      })
       continue
     }
+
+    if (message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0) {
+      mapped.push({
+        role: 'assistant',
+        content: message.content.trim().length > 0 ? message.content : null,
+        tool_calls: message.toolCalls.map(toolCall => ({
+          id: toolCall.id,
+          type: 'function',
+          function: {
+            name: toolCall.name,
+            arguments: toolCall.argumentsJson,
+          },
+        })),
+      })
+      continue
+    }
+
     mapped.push({
       role: message.role,
       content: message.content,
@@ -125,23 +182,23 @@ function toOpenAiMessages(messages: LlmChatMessage[]): Array<{ role: string; con
 function parseOpenAiChunk(value: unknown): {
   delta?: string
   finishReason?: 'stop' | 'length' | 'cancelled' | 'error'
+  toolCallDeltas: ToolCallDelta[]
 } {
   if (typeof value !== 'object' || value === null) {
-    return {}
+    return { toolCallDeltas: [] }
   }
   const chunk = value as Record<string, unknown>
   const choices = Array.isArray(chunk.choices) ? chunk.choices : []
   const choice = choices[0]
   if (typeof choice !== 'object' || choice === null) {
-    return {}
+    return { toolCallDeltas: [] }
   }
 
   const typedChoice = choice as Record<string, unknown>
   const deltaObj = typedChoice.delta
-  const delta =
-    typeof deltaObj === 'object' && deltaObj !== null && typeof (deltaObj as Record<string, unknown>).content === 'string'
-      ? ((deltaObj as Record<string, unknown>).content as string)
-      : undefined
+  const deltaRecord = typeof deltaObj === 'object' && deltaObj !== null ? (deltaObj as Record<string, unknown>) : undefined
+  const delta = typeof deltaRecord?.content === 'string' ? (deltaRecord.content as string) : undefined
+  const toolCallDeltas = parseToolCallDeltas(deltaRecord?.tool_calls)
 
   const finishReasonRaw = typedChoice.finish_reason
   // 只映射本协议支持的结束原因，未知值由默认 stop 收敛。
@@ -157,7 +214,79 @@ function parseOpenAiChunk(value: unknown): {
   return {
     ...(delta ? { delta } : {}),
     ...(finishReason ? { finishReason } : {}),
+    toolCallDeltas,
   }
+}
+
+function parseToolCallDeltas(value: unknown): ToolCallDelta[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const deltas: ToolCallDelta[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+
+    const typed = item as Record<string, unknown>
+    const index = typed.index
+    if (typeof index !== 'number' || !Number.isFinite(index) || index < 0) {
+      continue
+    }
+
+    const functionObject = typed.function
+    const functionRecord =
+      typeof functionObject === 'object' && functionObject !== null ? (functionObject as Record<string, unknown>) : undefined
+    const id = typeof typed.id === 'string' ? typed.id : undefined
+    const name = typeof functionRecord?.name === 'string' ? (functionRecord.name as string) : undefined
+    const argumentsChunk = typeof functionRecord?.arguments === 'string' ? (functionRecord.arguments as string) : undefined
+
+    deltas.push({
+      index,
+      ...(id ? { id } : {}),
+      ...(name ? { name } : {}),
+      ...(argumentsChunk ? { argumentsChunk } : {}),
+    })
+  }
+
+  return deltas
+}
+
+function mergeToolCallDeltas(accumulator: Map<number, ToolCallAccumulator>, deltas: ToolCallDelta[]): void {
+  for (const delta of deltas) {
+    const existing = accumulator.get(delta.index) ?? { argumentsText: '' }
+    if (delta.id) {
+      existing.id = delta.id
+    }
+    if (delta.name) {
+      existing.name = delta.name
+    }
+    if (delta.argumentsChunk) {
+      existing.argumentsText += delta.argumentsChunk
+    }
+    accumulator.set(delta.index, existing)
+  }
+}
+
+function resolveToolCalls(accumulator: Map<number, ToolCallAccumulator>): LlmToolCall[] {
+  if (accumulator.size === 0) {
+    return []
+  }
+
+  const resolved: LlmToolCall[] = []
+  const ordered = [...accumulator.entries()].sort(([left], [right]) => left - right)
+  for (const [index, toolCall] of ordered) {
+    if (!toolCall.name) {
+      continue
+    }
+    resolved.push({
+      id: toolCall.id ?? `tool-call-${index}`,
+      name: toolCall.name,
+      argumentsJson: toolCall.argumentsText.trim() || '{}',
+    })
+  }
+  return resolved
 }
 
 function mapReasoningLevel(level: LlmStreamRequest['reasoningLevel']): 'low' | 'medium' | 'high' | 'xhigh' {

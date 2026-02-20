@@ -17,10 +17,27 @@ import type { ProviderRegistry } from './providers/types'
 // LLM 提供方枚举
 export type LlmProvider = 'mock' | 'openai'
 
+export interface LlmToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export interface LlmToolCall {
+  id: string
+  name: string
+  argumentsJson: string
+}
+
 // 聊天消息输入结构（扩展侧内部使用）
 export interface LlmChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool' // 消息角色
   content: string // 消息内容
+  toolCallId?: string // tool 消息对应的 call id
+  toolCalls?: LlmToolCall[] // assistant 发起的 tool calls（用于后续回填 tool 结果）
 }
 
 // 流式调用请求参数
@@ -33,6 +50,7 @@ export interface LlmStreamRequest {
   apiKey?: string // Provider 访问密钥（按 provider 决定是否必填）
   baseUrl?: string // OpenAI 兼容网关基础地址（可选）
   temperature?: number // 温度参数
+  tools?: LlmToolDefinition[] // 可用工具定义（仅部分 provider 支持）
   idleTimeoutMs?: number // 空闲超时（毫秒）：长时间无增量时超时
   hardTimeoutMs?: number // 硬超时（毫秒）：整次请求最大持续时长
   timeoutMs?: number // 兼容字段：映射为 hardTimeoutMs
@@ -52,6 +70,12 @@ export type LlmStreamEvent =
   | {
       type: 'done'
       finishReason: 'stop' | 'length' | 'cancelled' | 'error'
+    }
+  | {
+      type: 'tool-call'
+      callId: string
+      toolName: string
+      argumentsJson: string
     }
   | {
       type: 'error'
