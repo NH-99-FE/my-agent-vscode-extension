@@ -5,6 +5,8 @@ import * as vscode from 'vscode'
 const SESSION_LIST_KEY = 'agent.chat.sessions'
 // 活跃会话 ID 存储键
 const ACTIVE_SESSION_ID_KEY = 'agent.chat.activeSessionId'
+// 会话默认标题
+const DEFAULT_SESSION_TITLE = 'New Chat'
 
 /**
  * 会话存储类
@@ -23,7 +25,13 @@ export class SessionStore {
    * @returns 会话列表
    */
   async getSessions(): Promise<ChatSession[]> {
-    return this.context.workspaceState.get<ChatSession[]>(SESSION_LIST_KEY, [])
+    const sessions = this.context.workspaceState.get<ChatSession[]>(SESSION_LIST_KEY, [])
+    const { sessions: normalizedSessions, changed } = backfillSessionTitles(sessions)
+    if (!changed) {
+      return sessions
+    }
+    await this.saveSessions(normalizedSessions)
+    return normalizedSessions
   }
 
   /**
@@ -80,6 +88,8 @@ export class SessionStore {
       ...(requestId ? { requestId } : {}),
       state: 'normal',
     })
+    // 仅在默认标题场景下更新为“首条用户消息摘要”，避免覆盖用户已存在标题。
+    maybeRefreshDefaultTitleFromMessages(session)
     session.updatedAt = now
 
     await this.saveSessions(nextSessions)
@@ -241,13 +251,63 @@ function createEmptySession(sessionId: string, titleSeed: string, now: number): 
 function toSessionTitle(text: string): string {
   const normalized = text.trim().replace(/\s+/g, ' ')
   if (!normalized) {
-    return 'New Chat'
+    return DEFAULT_SESSION_TITLE
   }
   const maxLen = 40
   if (normalized.length <= maxLen) {
     return normalized
   }
   return `${normalized.slice(0, maxLen)}...`
+}
+
+function deriveSessionTitleFromMessages(messages: ChatMessage[]): string {
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      continue
+    }
+    const userTitle = toSessionTitle(message.content)
+    if (userTitle !== DEFAULT_SESSION_TITLE) {
+      return userTitle
+    }
+  }
+  return DEFAULT_SESSION_TITLE
+}
+
+function shouldBackfillTitle(title: string): boolean {
+  const normalized = title.trim()
+  return normalized.length === 0 || normalized === DEFAULT_SESSION_TITLE
+}
+
+function maybeRefreshDefaultTitleFromMessages(session: ChatSession): void {
+  if (!shouldBackfillTitle(session.title)) {
+    return
+  }
+  const nextTitle = deriveSessionTitleFromMessages(session.messages)
+  if (nextTitle !== session.title) {
+    session.title = nextTitle
+  }
+}
+
+function backfillSessionTitles(sessions: ChatSession[]): { sessions: ChatSession[]; changed: boolean } {
+  let changed = false
+  const nextSessions = sessions.map(session => {
+    if (!shouldBackfillTitle(session.title)) {
+      return session
+    }
+    const nextTitle = deriveSessionTitleFromMessages(session.messages)
+    if (nextTitle === session.title) {
+      return session
+    }
+    changed = true
+    return {
+      ...session,
+      title: nextTitle,
+    }
+  })
+  return {
+    sessions: nextSessions,
+    changed,
+  }
 }
 
 function findLastPendingAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined {
