@@ -34,12 +34,16 @@ interface ChatServiceOptions {
 
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 const DEFAULT_HARD_TIMEOUT_MS = 15 * 60_000
-const MAX_TOOL_CALLS_PER_TURN = 1
+const MAX_TOOL_CALLS_PER_TURN = 5
 const TOOL_MAX_READ_BYTES = 256 * 1024
 const TOOL_MAX_READ_CHARS = 4000
 const TOOL_MAX_CONTROL_CHAR_RATIO = 0.1
 
 type ToolCallEvent = Extract<LlmStreamEvent, { type: 'tool-call' }>
+type ToolCallResult = {
+  toolCall: ToolCallEvent
+  toolResultContent: string
+}
 
 /**
  * 聊天服务类
@@ -142,19 +146,25 @@ export class ChatService {
         if (remainingToolCalls <= 0) {
           throw new Error('Tool call limit exceeded for this turn.')
         }
-        if (toolCalls.length > 1) {
-          throw new Error('Only one tool call is allowed per turn.')
+        if (toolCalls.length > remainingToolCalls) {
+          throw new Error('Tool call limit exceeded for this turn.')
         }
 
-        const toolCall = toolCalls[0]
-        if (!toolCall) {
-          throw new Error('Tool call payload is missing.')
+        const toolCallResults: ToolCallResult[] = []
+        for (const toolCall of toolCalls) {
+          if (!toolCall) {
+            throw new Error('Tool call payload is missing.')
+          }
+          const toolResultContent = await this.executeToolCall(toolCall, toolExecutionContext)
+          toolCallResults.push({
+            toolCall,
+            toolResultContent,
+          })
         }
 
-        remainingToolCalls -= 1
+        remainingToolCalls -= toolCallResults.length
         enableTools = false
-        const toolResultContent = await this.executeToolCall(toolCall, toolExecutionContext)
-        llmMessages = appendToolResultMessages(llmMessages, toolCall, toolResultContent)
+        llmMessages = appendToolResultMessages(llmMessages, toolCallResults)
       }
     } catch (error) {
       if (error instanceof LlmAbortError) {
@@ -214,25 +224,30 @@ export class ChatService {
   }
 }
 
-function appendToolResultMessages(messages: LlmChatMessage[], toolCall: ToolCallEvent, toolResultContent: string): LlmChatMessage[] {
-  const assistantToolCall: LlmToolCall = {
-    id: toolCall.callId,
-    name: toolCall.toolName,
-    argumentsJson: toolCall.argumentsJson,
+function appendToolResultMessages(messages: LlmChatMessage[], results: ToolCallResult[]): LlmChatMessage[] {
+  if (results.length === 0) {
+    return messages
   }
+
+  const assistantToolCalls: LlmToolCall[] = results.map(result => ({
+    id: result.toolCall.callId,
+    name: result.toolCall.toolName,
+    argumentsJson: result.toolCall.argumentsJson,
+  }))
+  const toolMessages: LlmChatMessage[] = results.map(result => ({
+    role: 'tool',
+    content: result.toolResultContent,
+    toolCallId: result.toolCall.callId,
+  }))
 
   return [
     ...messages,
     {
       role: 'assistant',
       content: '',
-      toolCalls: [assistantToolCall],
+      toolCalls: assistantToolCalls,
     },
-    {
-      role: 'tool',
-      content: toolResultContent,
-      toolCallId: toolCall.callId,
-    },
+    ...toolMessages,
   ]
 }
 
