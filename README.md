@@ -1,8 +1,8 @@
-# Agent - VS Code 智能编程助手
+# scout-programming-assistant - VS Code 智能编程助手
 
 一个功能完整的 VS Code 扩展，提供 LLM 对话、工具调用、文件上下文管理等 AI 辅助编程功能。
 
-> 项目名称：Scout | 扩展显示名：Agent | 发布者：lianglh
+> 插件名称：scout-programming-assistant | 标识符：lianglh.scout-programming-assistant | 发布者：lianglh
 
 ## 功能特性
 
@@ -117,10 +117,10 @@ my-agent-vscode-extension/
 
 ### VS Code 配置项
 
-| 配置项                      | 类型   | 默认值        | 说明                            |
-| --------------------------- | ------ | ------------- | ------------------------------- |
-| `agent.provider.default`    | enum   | auto          | Provider 模式：auto/mock/openai |
-| `agent.openai.baseUrl`      | string | ""            | OpenAI 兼容网关地址             |
+| 配置项                   | 类型   | 默认值 | 说明                            |
+| ------------------------ | ------ | ------ | ------------------------------- |
+| `agent.provider.default` | enum   | auto   | Provider 模式：auto/mock/openai |
+| `agent.openai.baseUrl`   | string | ""     | OpenAI 兼容网关地址             |
 
 ### 使用设置面板
 
@@ -133,9 +133,9 @@ my-agent-vscode-extension/
 
 ## 命令
 
-| 命令             | 说明                |
-| ---------------- | ------------------- |
-| `agent.openChat` | 打开 Agent 聊天窗口 |
+| 命令             | 说明                                      |
+| ---------------- | ----------------------------------------- |
+| `agent.openChat` | 打开 scout-programming-assistant 聊天窗口 |
 
 ## 开发
 
@@ -188,6 +188,25 @@ pnpm format        # Prettier
 ```bash
 pnpm vsce:package
 ```
+
+### 从 GitHub 安装 VSIX
+
+你可以将打包产物（如 `scout-programming-assistant-1.0.0.vsix`）上传到 GitHub（建议放在 Releases），用户可自行下载安装。
+
+方式 1：在 VS Code 图形界面安装
+
+1. 从 GitHub 下载 `.vsix` 文件到本地。
+2. 打开 VS Code 扩展面板。
+3. 点击右上角 `...`，选择 `Install from VSIX...`。
+4. 选择下载好的 `.vsix` 文件并完成安装。
+
+方式 2：命令行安装
+
+```bash
+code --install-extension scout-programming-assistant-1.0.0.vsix
+```
+
+升级时可直接安装新版本 VSIX 覆盖旧版本。
 
 ## 核心模块说明
 

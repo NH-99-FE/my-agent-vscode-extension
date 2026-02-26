@@ -1,3 +1,4 @@
+import OpenAI from 'openai'
 import type { LlmChatMessage, LlmStreamEvent, LlmStreamRequest, LlmToolCall } from '../client'
 import { assertNotCancelled, HARD_TIMEOUT_REASON, IDLE_TIMEOUT_REASON } from '../cancellation'
 import { LlmAbortError, LlmProviderError, LlmTimeoutError } from '../errors'
@@ -115,20 +116,11 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
 
 async function createOpenAIClient(apiKey: string, baseUrl?: string): Promise<OpenAIClientLike> {
   try {
-    // 用动态导入避免在扩展编译阶段耦合 SDK 类型细节。
-    const moduleName: string = 'openai'
-    const loaded = (await import(moduleName)) as Record<string, unknown>
-    const OpenAI = (loaded.default ?? loaded.OpenAI) as (new (options: Record<string, unknown>) => OpenAIClientLike) | undefined
-
-    if (!OpenAI) {
-      throw new Error('OpenAI SDK entry is unavailable.')
-    }
-
     const options: Record<string, unknown> = { apiKey }
     if (baseUrl) {
       options.baseURL = baseUrl
     }
-    return new OpenAI(options)
+    return new OpenAI(options) as unknown as OpenAIClientLike
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load OpenAI SDK.'
     throw new LlmProviderError({

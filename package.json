@@ -1,5 +1,5 @@
 {
-  "name": "@agent/root",
+  "name": "scout-programming-assistant",
   "displayName": "Agent",
   "publisher": "lianglh",
   "private": true,
@@ -82,7 +82,7 @@
     "dev:web": "pnpm --filter @agent/webview-ui dev",
     "build:web": "pnpm --filter @agent/webview-ui build",
     "build:types": "pnpm --filter @agent/types build",
-    "build:ws": "pnpm -r --filter ./packages/* --filter ./webview-ui run build",
+    "build:ws": "pnpm build:types && pnpm build:web",
     "build:turbo": "pnpm exec turbo run build",
     "typecheck:ext": "tsc -p tsconfig.extension.json --noEmit",
     "typecheck:types": "pnpm --filter @agent/types typecheck",
@@ -100,13 +100,24 @@
     "spellcheck": "cspell lint --dot --gitignore --color --cache --show-suggestions \"{src,packages,webview-ui,scripts}/**/*.{html,js,cjs,mjs,ts,tsx,css,scss,md}\"",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "vscode:prepublish": "pnpm build",
+    "vscode:prepublish": "node scripts/vsce-prepublish.mjs",
     "vsce:package": "vsce package",
     "prepare": "husky"
   },
   "keywords": [],
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NH-99-FE/my-agent-vscode-extension.git"
+  },
   "license": "ISC",
+  "files": [
+    "dist/**",
+    "media/**",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
   "packageManager": "pnpm@10.23.0",
   "dependencies": {
     "@agent/types": "workspace:*",

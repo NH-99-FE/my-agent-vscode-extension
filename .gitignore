@@ -21,7 +21,7 @@ coverage
 **/build
 **/coverage
 *.tsbuildinfo
-*.vsix
+# *.vsix
 
 # Tool caches
 .turbo
