@@ -348,8 +348,6 @@ export const useThreadComposerIncludeActiveEditorContext = () =>
   useThreadComposerStore(state => selectCurrentDraft(state).includeActiveEditorContext)
 // 仅订阅当前会话附件列表
 export const useThreadComposerAttachments = () => useThreadComposerStore(state => selectCurrentDraft(state).attachments)
-// 仅订阅当前会话内联提示
-export const useThreadComposerInlineNotice = () => useThreadComposerStore(state => selectCurrentDraft(state).inlineNotice)
 // 仅订阅当前会话发送态
 export const useThreadComposerIsSending = () => useThreadComposerStore(state => state.sendingBySession[state.sessionId] ?? false)
 

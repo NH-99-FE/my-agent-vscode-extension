@@ -58,23 +58,6 @@ export const IDLE_TIMEOUT_REASON = '__idle_timeout__'
 export const HARD_TIMEOUT_REASON = '__hard_timeout__'
 const LEGACY_TIMEOUT_REASON = '__timeout__'
 
-export function createTimeoutController(timeoutMs?: number, timeoutReason: string = HARD_TIMEOUT_REASON): LlmCancellationController {
-  const controller = new LlmCancellationController()
-  if (typeof timeoutMs !== 'number' || timeoutMs <= 0) {
-    return controller
-  }
-
-  const handle = setTimeout(() => {
-    controller.cancel(timeoutReason)
-  }, timeoutMs)
-
-  controller.signal.onCancel(() => {
-    clearTimeout(handle)
-  })
-
-  return controller
-}
-
 export function mergeSignals(...signals: Array<LlmCancellationSignal | undefined>): LlmCancellationSignal | undefined {
   const activeSignals = signals.filter((signal): signal is LlmCancellationSignal => Boolean(signal))
   if (activeSignals.length === 0) {

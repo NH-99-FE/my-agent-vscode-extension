@@ -564,14 +564,6 @@ export const useThreadSessionMessages = (sessionId: string | undefined) =>
     return state.sessionsById[sessionId]?.messages ?? EMPTY_MESSAGES
   })
 
-export const useThreadSessionError = (sessionId: string | undefined) =>
-  useThreadSessionStore(state => {
-    if (!sessionId) {
-      return null
-    }
-    return state.sessionsById[sessionId]?.error ?? null
-  })
-
 export const useThreadSessionHasActiveRequest = (sessionId: string | undefined) =>
   useThreadSessionStore(state => {
     if (!sessionId) {
