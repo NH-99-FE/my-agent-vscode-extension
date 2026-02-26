@@ -111,7 +111,6 @@ my-agent-vscode-extension/
 
 - **react-markdown + remark-gfm** - Markdown 渲染，支持 GitHub Flavored Markdown
 - **@tanstack/react-virtual** - 虚拟滚动，处理大量历史消息
-- **react-resizable-panels** - 可调整大小面板
 
 ## 配置
 
