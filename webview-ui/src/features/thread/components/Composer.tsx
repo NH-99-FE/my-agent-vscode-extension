@@ -165,14 +165,18 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         setSessionProtocolError,
         setSessionProtocolErrorByRequest,
       })
-      handleThreadExtensionMessage(message, {
-        addPickedFiles,
-        consumePendingContextPickSession,
-        clearAttachments,
-        setSending,
-        setInlineNotice,
-        endAssistantRequest,
-      }, streamOutcome)
+      handleThreadExtensionMessage(
+        message,
+        {
+          addPickedFiles,
+          consumePendingContextPickSession,
+          clearAttachments,
+          setSending,
+          setInlineNotice,
+          endAssistantRequest,
+        },
+        streamOutcome
+      )
     })
 
     return () => {
@@ -284,7 +288,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         onChange={event => {
           setText(event.target.value)
         }}
-        placeholder="向Codex任意提问"
+        placeholder="向Scout任意提问"
         className={`max-h-50 min-h-15 ${isOverflowing ? 'overflow-y-auto' : 'overflow-y-hidden'}`}
       />
       <div className="flex items-center justify-start gap-1">
