@@ -121,8 +121,6 @@ my-agent-vscode-extension/
 | --------------------------- | ------ | ------------- | ------------------------------- |
 | `agent.provider.default`    | enum   | auto          | Provider 模式：auto/mock/openai |
 | `agent.openai.baseUrl`      | string | ""            | OpenAI 兼容网关地址             |
-| `agent.openai.defaultModel` | string | gpt-4o-mini   | 默认模型                        |
-| `agent.openai.models`       | array  | [gpt-4o-mini] | 推荐模型列表                    |
 
 ### 使用设置面板
 
