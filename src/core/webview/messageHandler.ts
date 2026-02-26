@@ -171,6 +171,7 @@ async function handleChatSend(
   previous?.controller.cancel('superseded by a new request')
 
   const controller = new LlmCancellationController()
+  const turnId = createTurnId()
   inFlightBySession.set(message.payload.sessionId, {
     controller,
     requestId: message.requestId,
@@ -188,77 +189,98 @@ async function handleChatSend(
     // 消费 LLM 流并映射到 Webview 协议事件。
     for await (const event of stream) {
       switch (event.type) {
-        case 'text-delta':
+        case 'text-delta': {
+          const deltaSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
           await postTypedMessage(panel, {
             type: 'chat.delta',
-            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+            requestId: message.requestId,
             payload: {
               sessionId: message.payload.sessionId,
+              requestId: message.requestId,
+              turnId,
+              seq: deltaSeq,
               textDelta: event.delta,
-              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
-        case 'done':
+        }
+        case 'done': {
+          const doneSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
           await postTypedMessage(panel, {
             type: 'chat.done',
-            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+            requestId: message.requestId,
             payload: {
               sessionId: message.payload.sessionId,
+              requestId: message.requestId,
+              turnId,
+              seq: doneSeq,
               finishReason: event.finishReason,
-              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
-        case 'error':
+        }
+        case 'error': {
+          const errorSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
           await postTypedMessage(panel, {
             type: 'chat.error',
-            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+            requestId: message.requestId,
             payload: {
               sessionId: message.payload.sessionId,
+              requestId: message.requestId,
+              turnId,
+              seq: errorSeq,
               message: event.message,
-              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
+        }
       }
     }
   } catch (error) {
     if (error instanceof LlmAbortError) {
       // 取消场景走 done(cancelled)，而不是 error。
+      const doneSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
       await postTypedMessage(panel, {
         type: 'chat.done',
-        ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+        requestId: message.requestId,
         payload: {
           sessionId: message.payload.sessionId,
+          requestId: message.requestId,
+          turnId,
+          seq: doneSeq,
           finishReason: 'cancelled',
-          seq: nextStreamSequence(streamSeqByRequest, message.requestId),
         },
       })
       return
     }
 
     if (error instanceof LlmTimeoutError) {
+      const errorSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
       await postTypedMessage(panel, {
         type: 'chat.error',
-        ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+        requestId: message.requestId,
         payload: {
           sessionId: message.payload.sessionId,
+          requestId: message.requestId,
+          turnId,
+          seq: errorSeq,
           message: error.message,
-          seq: nextStreamSequence(streamSeqByRequest, message.requestId),
         },
       })
       return
     }
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown chat error.'
+    const errorSeq = nextStreamSequence(streamSeqByRequest, message.requestId)
     await postTypedMessage(panel, {
       type: 'chat.error',
-      ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+      requestId: message.requestId,
       payload: {
         sessionId: message.payload.sessionId,
+        requestId: message.requestId,
+        turnId,
+        seq: errorSeq,
         message: errorMessage,
-        seq: nextStreamSequence(streamSeqByRequest, message.requestId),
       },
     })
   } finally {
@@ -476,6 +498,12 @@ function nextStreamSequence(streamSeqByRequest: Map<string, number>, requestId: 
   const next = current + 1
   streamSeqByRequest.set(requestId, next)
   return next
+}
+
+function createTurnId(): string {
+  const timestamp = Date.now().toString(36)
+  const randomSuffix = Math.random().toString(36).slice(2, 10)
+  return `turn-${timestamp}-${randomSuffix}`
 }
 
 /**

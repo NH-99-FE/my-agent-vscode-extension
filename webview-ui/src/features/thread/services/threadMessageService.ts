@@ -1,37 +1,35 @@
-import type { ChatAttachment, ExtensionToWebviewMessage, WebviewToExtensionMessage, ReasoningLevel } from '@agent/types'
+import type { ChatAttachment, ExtensionToWebviewMessage, ReasoningLevel, WebviewToExtensionMessage } from '@agent/types'
 import { CONTEXT_FILES_LIMIT_NOTICE, MAX_CONTEXT_FILES } from '../store/threadComposerStore'
-import { clearStreamRequest, STREAM_PROTOCOL_GAP_ERROR, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR } from './streamRequestGuard'
+import {
+  clearStreamRequest,
+  STREAM_PROTOCOL_GAP_ERROR,
+  STREAM_PROTOCOL_INVALID_SEQUENCE_ERROR,
+  STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR,
+  STREAM_PROTOCOL_REQUEST_ID_MISMATCH_ERROR,
+  STREAM_PROTOCOL_TURN_MISMATCH_ERROR,
+  STREAM_PROTOCOL_TURN_MISSING_ERROR,
+} from './streamRequestGuard'
 import type { StreamMessageOutcome } from './threadSessionService'
 
-// 发送聊天消息的输入参数
 type SendChatInput = {
-  requestId: string // 本次发送请求 ID（用于流式回包关联）
-  sessionId: string // 请求关联的会话 ID
-  text: string // 用户输入文本
-  model: string // 目标模型 ID
-  reasoningLevel: ReasoningLevel // 推理强度等级
-  attachments: ChatAttachment[] // 本次请求附带的上下文附件
-  includeActiveEditorContext: boolean // 是否注入活动编辑器上下文
+  requestId: string
+  sessionId: string
+  text: string
+  model: string
+  reasoningLevel: ReasoningLevel
+  attachments: ChatAttachment[]
+  includeActiveEditorContext: boolean
 }
 
-// 线程消息操作接口
 type ThreadMessageActions = {
-  addPickedFiles: (files: ChatAttachment[], targetSessionId?: string) => void // 合并附件选择结果
-  consumePendingContextPickSession: (requestId?: string) => string | undefined // 消费文件选择请求关联，返回目标会话
-  clearAttachments: (targetSessionId?: string) => void // 清空附件（仅成功完成时调用）
-  setSending: (targetSessionId: string, isSending: boolean) => void // 更新发送态
-  setInlineNotice: (message: string | null, targetSessionId?: string) => void // 更新内联提示
-  getActiveAssistantRequestId: (sessionId: string) => string | undefined // 获取会话 active requestId
-  isActiveAssistantRequest: (sessionId: string, requestId?: string) => boolean // 判断 requestId 是否命中 active 请求
-  endAssistantRequest: (sessionId: string, requestId: string) => void // 仅匹配时结束 active 请求
+  addPickedFiles: (files: ChatAttachment[], targetSessionId?: string) => void
+  consumePendingContextPickSession: (requestId?: string) => string | undefined
+  clearAttachments: (targetSessionId?: string) => void
+  setSending: (targetSessionId: string, isSending: boolean) => void
+  setInlineNotice: (message: string | null, targetSessionId?: string) => void
+  endAssistantRequest: (sessionId: string, requestId: string) => void
 }
 
-/**
- * 统一组装 `chat.send` 消息
- * @param input 发送聊天的输入参数
- * @returns 组装好的消息对象
- * 确保 payload 与协议严格对齐
- */
 export function buildChatSendMessage(input: SendChatInput): WebviewToExtensionMessage {
   return {
     type: 'chat.send',
@@ -47,12 +45,6 @@ export function buildChatSendMessage(input: SendChatInput): WebviewToExtensionMe
   }
 }
 
-/**
- * 统一组装 `chat.cancel` 消息
- * @param sessionId 要取消的会话 ID
- * @param requestId 可选请求 ID（命中当前 active request 时透传）
- * @returns 组装好的消息对象
- */
 export function buildChatCancelMessage(sessionId: string, requestId?: string): WebviewToExtensionMessage {
   return {
     type: 'chat.cancel',
@@ -63,12 +55,6 @@ export function buildChatCancelMessage(sessionId: string, requestId?: string): W
   }
 }
 
-/**
- * 统一组装 `context.files.pick` 请求消息
- * @param maxCount 最大文件数量
- * @param requestId 请求 ID，用于回包关联
- * @returns 组装好的消息对象
- */
 export function buildContextFilesPickMessage(maxCount: number, requestId: string): WebviewToExtensionMessage {
   return {
     type: 'context.files.pick',
@@ -79,16 +65,44 @@ export function buildContextFilesPickMessage(maxCount: number, requestId: string
   }
 }
 
-/**
- * 处理扩展侧回包并下发到 store actions
- * @param message 扩展发送的消息
- * @param actions 线程消息操作接口
- *
- * 处理逻辑：
- * - `chat.done(stop|length)`：清空附件
- * - `chat.error` / `chat.done(cancelled|error)`：保留附件
- * - 发送态按 sessionId 维护，不依赖当前激活会话，避免切会话后 sending 悬挂
- */
+function resolveStreamProtocolNotice(outcome: StreamMessageOutcome): string | undefined {
+  switch (outcome) {
+    case 'missing_with_active':
+      return STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
+    case 'gap':
+      return STREAM_PROTOCOL_GAP_ERROR
+    case 'invalid_seq':
+      return STREAM_PROTOCOL_INVALID_SEQUENCE_ERROR
+    case 'turn_missing':
+      return STREAM_PROTOCOL_TURN_MISSING_ERROR
+    case 'turn_mismatch':
+      return STREAM_PROTOCOL_TURN_MISMATCH_ERROR
+    case 'request_mismatch':
+      return STREAM_PROTOCOL_REQUEST_ID_MISMATCH_ERROR
+    default:
+      return undefined
+  }
+}
+
+function shouldTerminateStream(outcome: StreamMessageOutcome): boolean {
+  return (
+    outcome === 'missing_with_active' ||
+    outcome === 'gap' ||
+    outcome === 'invalid_seq' ||
+    outcome === 'turn_missing' ||
+    outcome === 'turn_mismatch' ||
+    outcome === 'request_mismatch'
+  )
+}
+
+function closeRequestLifecycle(sessionId: string, requestId: string, actions: ThreadMessageActions): void {
+  if (requestId.trim().length === 0) {
+    return
+  }
+  actions.endAssistantRequest(sessionId, requestId)
+  clearStreamRequest(requestId)
+}
+
 export function handleThreadExtensionMessage(
   message: ExtensionToWebviewMessage,
   actions: ThreadMessageActions,
@@ -101,36 +115,29 @@ export function handleThreadExtensionMessage(
       return
     }
     case 'chat.delta': {
-      const outcome = resolveStreamMessageOutcome(streamOutcome)
-      if (outcome !== 'missing_with_active' && outcome !== 'gap') {
+      if (!shouldTerminateStream(streamOutcome)) {
         return
       }
-      const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
-      if (activeRequestId === undefined) {
-        return
+      const protocolNotice = resolveStreamProtocolNotice(streamOutcome)
+      if (protocolNotice) {
+        actions.setInlineNotice(protocolNotice, message.payload.sessionId)
       }
-      const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
-      actions.setInlineNotice(notice, message.payload.sessionId)
       actions.setSending(message.payload.sessionId, false)
-      actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
-      clearStreamRequest(activeRequestId)
+      closeRequestLifecycle(message.payload.sessionId, message.payload.requestId, actions)
       return
     }
     case 'chat.done': {
-      const outcome = resolveStreamMessageOutcome(streamOutcome)
-      if (outcome === 'ignore') {
+      if (streamOutcome === 'ignore') {
+        clearStreamRequest(message.payload.requestId)
         return
       }
-      if (outcome === 'missing_with_active' || outcome === 'gap') {
-        const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
-        if (activeRequestId === undefined) {
-          return
+      if (shouldTerminateStream(streamOutcome)) {
+        const protocolNotice = resolveStreamProtocolNotice(streamOutcome)
+        if (protocolNotice) {
+          actions.setInlineNotice(protocolNotice, message.payload.sessionId)
         }
-        const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
-        actions.setInlineNotice(notice, message.payload.sessionId)
         actions.setSending(message.payload.sessionId, false)
-        actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
-        clearStreamRequest(activeRequestId)
+        closeRequestLifecycle(message.payload.sessionId, message.payload.requestId, actions)
         return
       }
 
@@ -138,38 +145,27 @@ export function handleThreadExtensionMessage(
       if (message.payload.finishReason === 'stop' || message.payload.finishReason === 'length') {
         actions.clearAttachments(message.payload.sessionId)
       }
-      const requestId = message.requestId
-      if (requestId !== undefined) {
-        actions.endAssistantRequest(message.payload.sessionId, requestId)
-        clearStreamRequest(requestId)
-      }
+      closeRequestLifecycle(message.payload.sessionId, message.payload.requestId, actions)
       return
     }
     case 'chat.error': {
-      const outcome = resolveStreamMessageOutcome(streamOutcome)
-      if (outcome === 'ignore') {
+      if (streamOutcome === 'ignore') {
+        clearStreamRequest(message.payload.requestId)
         return
       }
-      if (outcome === 'missing_with_active' || outcome === 'gap') {
-        const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
-        if (activeRequestId === undefined) {
-          return
+      if (shouldTerminateStream(streamOutcome)) {
+        const protocolNotice = resolveStreamProtocolNotice(streamOutcome)
+        if (protocolNotice) {
+          actions.setInlineNotice(protocolNotice, message.payload.sessionId)
         }
-        const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
-        actions.setInlineNotice(notice, message.payload.sessionId)
         actions.setSending(message.payload.sessionId, false)
-        actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
-        clearStreamRequest(activeRequestId)
+        closeRequestLifecycle(message.payload.sessionId, message.payload.requestId, actions)
         return
       }
 
       actions.setSending(message.payload.sessionId, false)
       actions.setInlineNotice(message.payload.message, message.payload.sessionId)
-      const requestId = message.requestId
-      if (requestId !== undefined) {
-        actions.endAssistantRequest(message.payload.sessionId, requestId)
-        clearStreamRequest(requestId)
-      }
+      closeRequestLifecycle(message.payload.sessionId, message.payload.requestId, actions)
       return
     }
     default: {
@@ -178,25 +174,10 @@ export function handleThreadExtensionMessage(
   }
 }
 
-function resolveStreamMessageOutcome(
-  streamOutcome: StreamMessageOutcome
-): StreamMessageOutcome {
-  if (streamOutcome === 'not_stream') {
-    return 'ignore'
-  }
-  return streamOutcome
-}
-
-/**
- * 计算还能继续添加的附件数量
- * @param currentCount 当前附件数量
- * @returns 剩余可添加数量（不会小于 0）
- */
 export function getContextFilesRemaining(currentCount: number): number {
   return Math.max(MAX_CONTEXT_FILES - currentCount, 0)
 }
 
-// 统一读取附件超限提示文案
 export function getContextFilesLimitNotice(): string {
   return CONTEXT_FILES_LIMIT_NOTICE
 }

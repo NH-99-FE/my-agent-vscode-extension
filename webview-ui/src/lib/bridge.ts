@@ -89,7 +89,53 @@ function isExtensionMessage(value: unknown): value is ExtensionToWebviewMessage 
   }
 
   // type 必须属于已知协议集合
-  return extensionToWebviewTypes.includes(maybeMessage.type as ExtensionToWebviewMessage['type'])
+  if (!extensionToWebviewTypes.includes(maybeMessage.type as ExtensionToWebviewMessage['type'])) {
+    return false
+  }
+
+  switch (maybeMessage.type) {
+    case 'chat.delta':
+    case 'chat.done':
+    case 'chat.error': {
+      if (!isNonEmptyString(maybeMessage.requestId)) {
+        return false
+      }
+      if (typeof maybeMessage.payload !== 'object' || maybeMessage.payload === null) {
+        return false
+      }
+      const payload = maybeMessage.payload as Record<string, unknown>
+      if (!isNonEmptyString(payload.sessionId) || !isNonEmptyString(payload.requestId) || !isNonEmptyString(payload.turnId)) {
+        return false
+      }
+      if (!isPositiveInteger(payload.seq)) {
+        return false
+      }
+      if (payload.requestId !== maybeMessage.requestId) {
+        return false
+      }
+      if (maybeMessage.type === 'chat.delta') {
+        return typeof payload.textDelta === 'string'
+      }
+      if (maybeMessage.type === 'chat.done') {
+        return isChatDoneFinishReason(payload.finishReason)
+      }
+      return typeof payload.message === 'string'
+    }
+    default:
+      return true
+  }
+}
+
+function isChatDoneFinishReason(value: unknown): boolean {
+  return value === 'stop' || value === 'length' || value === 'cancelled' || value === 'error'
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
 }
 
 // 单例导出，避免在多个组件中重复创建桥接实例

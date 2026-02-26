@@ -1,6 +1,5 @@
-// 流式回包 requestId 门禁判定结果
 export type StreamGateResult = 'matched' | 'ignore' | 'missing_with_active'
-export type StreamSequenceGateResult = 'accept' | 'ignore' | 'gap'
+export type StreamSequenceGateResult = 'accept' | 'ignore' | 'gap' | 'invalid_seq'
 type StreamEventType = 'chat.delta' | 'chat.done' | 'chat.error'
 type StreamRequestStatus = 'active' | 'cancelling' | 'closed'
 
@@ -9,9 +8,12 @@ interface StreamRequestState {
   status: StreamRequestStatus
 }
 
-// 协议错误提示：当流式回包缺失 requestId 且当前会话存在 active request 时使用
 export const STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR = '协议错误：回包缺少 requestId，已终止当前请求。'
 export const STREAM_PROTOCOL_GAP_ERROR = '协议错误：流式序号不连续，已终止当前请求。'
+export const STREAM_PROTOCOL_INVALID_SEQUENCE_ERROR = '协议错误：流式序号非法，已终止当前请求。'
+export const STREAM_PROTOCOL_TURN_MISSING_ERROR = '协议错误：未找到 request 对应的回合绑定，已终止当前请求。'
+export const STREAM_PROTOCOL_TURN_MISMATCH_ERROR = '协议错误：turnId 与 request 绑定不一致，已终止当前请求。'
+export const STREAM_PROTOCOL_REQUEST_ID_MISMATCH_ERROR = '协议错误：payload.requestId 与消息 requestId 不一致。'
 
 const streamRequestStateById = new Map<string, StreamRequestState>()
 
@@ -19,13 +21,6 @@ type StreamRequestGuardActions = {
   isActiveAssistantRequest: (sessionId: string, requestId?: string) => boolean
 }
 
-/**
- * 统一判定流式回包的 requestId 是否可被当前会话消费。
- * 规则：
- * - requestId 匹配 active request => matched
- * - requestId 不匹配 active request => ignore
- * - requestId 缺失：有 active => missing_with_active；无 active => ignore
- */
 export function resolveStreamGate(sessionId: string, requestId: string | undefined, actions: StreamRequestGuardActions): StreamGateResult {
   if (requestId === undefined) {
     return actions.isActiveAssistantRequest(sessionId) ? 'missing_with_active' : 'ignore'
@@ -74,29 +69,14 @@ function ensureStreamRequestState(requestId: string): StreamRequestState {
   return created
 }
 
-function asPositiveInteger(value: number | undefined): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+function asPositiveInteger(value: number): number | undefined {
+  if (!Number.isInteger(value) || value <= 0) {
     return undefined
   }
   return value
 }
 
-/**
- * 统一判定流式序号是否可被消费。
- * - seq 缺失/非法：兼容旧协议，按 requestId gate 结果继续消费
- * - seq 重复/回退：忽略
- * - seq 跳号：判定 gap（并将请求状态关闭）
- * - cancelling 状态：delta 直接忽略；done/error 允许收尾
- */
-export function resolveStreamSequenceGate(
-  requestId: string | undefined,
-  seq: number | undefined,
-  eventType: StreamEventType
-): StreamSequenceGateResult {
-  if (!requestId) {
-    return 'accept'
-  }
-
+export function resolveStreamSequenceGate(requestId: string, seq: number, eventType: StreamEventType): StreamSequenceGateResult {
   const state = ensureStreamRequestState(requestId)
   if (state.status === 'closed') {
     return 'ignore'
@@ -108,10 +88,8 @@ export function resolveStreamSequenceGate(
 
   const normalizedSeq = asPositiveInteger(seq)
   if (normalizedSeq === undefined) {
-    if (eventType !== 'chat.delta') {
-      state.status = 'closed'
-    }
-    return 'accept'
+    state.status = 'closed'
+    return 'invalid_seq'
   }
 
   if (state.status === 'cancelling' && eventType !== 'chat.delta') {

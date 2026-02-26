@@ -93,15 +93,18 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   } = useThreadComposerActions()
   const {
     appendUserMessage,
-    appendAssistantDelta,
-    appendAssistantDeltaBatch,
-    completeAssistantMessage,
-    setAssistantError,
+    appendAssistantDeltaByMessageId,
+    completeAssistantMessageByRequest,
+    setAssistantErrorByRequest,
     beginAssistantRequest,
+    markAssistantRequestCancelling,
+    bindAssistantTurnId,
+    getTurnMessageId,
     getActiveAssistantRequestId,
     isActiveAssistantRequest,
     endAssistantRequest,
     setSessionProtocolError,
+    setSessionProtocolErrorByRequest,
   } = useThreadSessionActions()
 
   const contextFiles: ContextFileItem[] = attachments.map(file => ({
@@ -123,9 +126,9 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   const streamDeltaBuffer = useMemo(
     () =>
       createStreamDeltaBuffer({
-        appendAssistantDeltaBatch,
+        appendAssistantDeltaByMessageId,
       }),
-    [appendAssistantDeltaBatch]
+    [appendAssistantDeltaByMessageId]
   )
 
   const resizeTextarea = () => {
@@ -153,11 +156,14 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     setThreadSessionDeltaBuffer(streamDeltaBuffer)
     const dispose = bridge.onMessage(message => {
       const streamOutcome = handleThreadSessionMessage(message, {
-        appendAssistantDelta,
-        completeAssistantMessage,
-        setAssistantError,
+        bindAssistantTurnId,
+        getTurnMessageId,
+        appendAssistantDeltaByMessageId,
+        completeAssistantMessageByRequest,
+        setAssistantErrorByRequest,
         isActiveAssistantRequest,
         setSessionProtocolError,
+        setSessionProtocolErrorByRequest,
       })
       handleThreadExtensionMessage(message, {
         addPickedFiles,
@@ -165,8 +171,6 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         clearAttachments,
         setSending,
         setInlineNotice,
-        getActiveAssistantRequestId,
-        isActiveAssistantRequest,
         endAssistantRequest,
       }, streamOutcome)
     })
@@ -178,16 +182,18 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     }
   }, [
     addPickedFiles,
-    appendAssistantDelta,
+    appendAssistantDeltaByMessageId,
+    bindAssistantTurnId,
+    completeAssistantMessageByRequest,
     endAssistantRequest,
-    getActiveAssistantRequestId,
+    getTurnMessageId,
     isActiveAssistantRequest,
     clearAttachments,
-    completeAssistantMessage,
     consumePendingContextPickSession,
-    setAssistantError,
+    setAssistantErrorByRequest,
     setInlineNotice,
     setSessionProtocolError,
+    setSessionProtocolErrorByRequest,
     setSending,
     streamDeltaBuffer,
   ])
@@ -229,10 +235,10 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     }
     const requestId = crypto.randomUUID()
     setInlineNotice(null)
+    appendUserMessage(sessionId, text)
     beginStreamRequest(requestId)
     beginAssistantRequest(sessionId, requestId)
     setSending(sessionId, true)
-    appendUserMessage(sessionId, text)
     bridge.send(
       buildChatSendMessage({
         requestId,
@@ -257,6 +263,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     if (activeRequestId === undefined) {
       return
     }
+    markAssistantRequestCancelling(sessionId, activeRequestId)
     markStreamRequestCancelling(activeRequestId)
     bridge.send(buildChatCancelMessage(sessionId, activeRequestId))
   }

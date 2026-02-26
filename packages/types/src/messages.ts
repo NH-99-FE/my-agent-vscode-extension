@@ -124,30 +124,39 @@ export interface SystemErrorMessage extends MessageMeta {
 // 扩展 -> 前端：流式增量输出（token/chunk）
 export interface ChatDeltaMessage extends MessageMeta {
   type: 'chat.delta' // 消息类型
+  requestId: string // 请求 ID（流式消息必填）
   payload: {
     sessionId: string // 会话 ID
+    requestId: string // 请求 ID（与顶层 requestId 一致）
+    turnId: string // 助手回合 ID（稳定落点）
+    seq: number // 流式序号（同 requestId 内单调递增）
     textDelta: string // 新增文本片段，前端应增量拼接
-    seq?: number // 可选流式序号（同 requestId 内单调递增）
   }
 }
 
 // 扩展 -> 前端：流式输出结束事件
 export interface ChatDoneMessage extends MessageMeta {
   type: 'chat.done' // 消息类型
+  requestId: string // 请求 ID（流式消息必填）
   payload: {
     sessionId: string // 会话 ID
+    requestId: string // 请求 ID（与顶层 requestId 一致）
+    turnId: string // 助手回合 ID（稳定落点）
+    seq: number // 终态序号（应大于最后一条 delta 的 seq）
     finishReason: 'stop' | 'length' | 'cancelled' | 'error' // 结束原因：正常停止、长度截断、主动取消或错误结束
-    seq?: number // 可选终态序号（应大于最后一条 delta 的 seq）
   }
 }
 
 // 扩展 -> 前端：聊天请求失败事件（业务级错误）
 export interface ChatErrorMessage extends MessageMeta {
   type: 'chat.error' // 消息类型
+  requestId: string // 请求 ID（流式消息必填）
   payload: {
     sessionId: string // 会话 ID
+    requestId: string // 请求 ID（与顶层 requestId 一致）
+    turnId: string // 助手回合 ID（稳定落点）
+    seq: number // 终态序号（应大于最后一条 delta 的 seq）
     message: string // 错误信息
-    seq?: number // 可选终态序号（应大于最后一条 delta 的 seq）
   }
 }
 

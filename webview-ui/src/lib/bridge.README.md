@@ -82,13 +82,19 @@ function Demo() {
 - `finishReason = 'stop' | 'length'`：清空附件
 - `finishReason = 'cancelled' | 'error'`：保留附件，方便重试
 
-## 5.2 chat.delta/chat.done/chat.error 的 seq 约定
+## 5.2 chat.delta/chat.done/chat.error 的强约束字段
 
-流式回包支持可选 `seq` 字段（同一个 `requestId` 下单调递增）：
+当前协议要求流式回包必须同时包含：
 
-- `chat.delta`：普通增量事件，`seq` 递增
-- `chat.done` / `chat.error`：终态事件，`seq` 应大于最后一条 `chat.delta.seq`
-- 旧协议兼容：若消息缺失 `seq`，前端回退为仅按 `requestId` 做门禁
+- 顶层 `requestId`
+- `payload.requestId`（需与顶层一致）
+- `payload.turnId`（稳定回合落点）
+- `payload.seq`（同一个 `requestId` 下单调递增）
+
+其中：
+
+- `chat.delta`：增量事件，`seq` 递增
+- `chat.done` / `chat.error`：终态事件，`seq` 必须大于最后一条 `chat.delta.seq`
 
 前端消费规则：
 
