@@ -18,6 +18,7 @@ import {
 } from '../services/threadMessageService'
 import { handleThreadSessionMessage, setThreadSessionDeltaBuffer } from '../services/threadSessionService'
 import { createStreamDeltaBuffer } from '../services/streamDeltaBuffer'
+import { beginStreamRequest, markStreamRequestCancelling } from '../services/streamRequestGuard'
 import { useEditorContextSubscription } from '../hooks/useEditorContextSubscription'
 import {
   useThreadComposerActions,
@@ -151,7 +152,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   useEffect(() => {
     setThreadSessionDeltaBuffer(streamDeltaBuffer)
     const dispose = bridge.onMessage(message => {
-      handleThreadSessionMessage(message, {
+      const streamOutcome = handleThreadSessionMessage(message, {
         appendAssistantDelta,
         completeAssistantMessage,
         setAssistantError,
@@ -167,7 +168,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
         getActiveAssistantRequestId,
         isActiveAssistantRequest,
         endAssistantRequest,
-      })
+      }, streamOutcome)
     })
 
     return () => {
@@ -228,6 +229,7 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
     }
     const requestId = crypto.randomUUID()
     setInlineNotice(null)
+    beginStreamRequest(requestId)
     beginAssistantRequest(sessionId, requestId)
     setSending(sessionId, true)
     appendUserMessage(sessionId, text)
@@ -251,8 +253,11 @@ export const Composer = ({ routeThreadId }: ComposerProps) => {
   }
 
   const handlePause = () => {
-    setSending(sessionId, false)
     const activeRequestId = getActiveAssistantRequestId(sessionId)
+    if (activeRequestId === undefined) {
+      return
+    }
+    markStreamRequestCancelling(activeRequestId)
     bridge.send(buildChatCancelMessage(sessionId, activeRequestId))
   }
 

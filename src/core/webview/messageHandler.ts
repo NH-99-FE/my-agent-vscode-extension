@@ -38,6 +38,8 @@ export function registerWebviewMessageHandler(panel: WebviewHost, context: vscod
   const settingsService = new SettingsService(context)
   // 同一个 session 只允许一个进行中的请求，新的请求会覆盖并取消旧请求
   const inFlightBySession = new Map<string, InFlightRequest>()
+  // 同一个 requestId 的流式事件序号（delta/done/error）单调递增。
+  const streamSeqByRequest = new Map<string, number>()
   let editorStateSubscription: vscode.Disposable | undefined
   let editorStateSubscriberCount = 0
 
@@ -103,7 +105,7 @@ export function registerWebviewMessageHandler(panel: WebviewHost, context: vscod
           })
           break
         case 'chat.send':
-          await handleChatSend(panel, parsedMessage, chatService, inFlightBySession)
+          await handleChatSend(panel, parsedMessage, chatService, inFlightBySession, streamSeqByRequest)
           break
         case 'chat.cancel':
           await handleChatCancel(parsedMessage, chatService, inFlightBySession)
@@ -146,6 +148,7 @@ export function registerWebviewMessageHandler(panel: WebviewHost, context: vscod
       onDidReceiveMessageDisposable.dispose()
       editorStateSubscriberCount = 0
       stopEditorStateSubscription()
+      streamSeqByRequest.clear()
     },
   }
 }
@@ -160,7 +163,8 @@ async function handleChatSend(
   panel: WebviewHost,
   message: Extract<WebviewToExtensionMessage, { type: 'chat.send' }>,
   chatService: ChatService,
-  inFlightBySession: Map<string, InFlightRequest>
+  inFlightBySession: Map<string, InFlightRequest>,
+  streamSeqByRequest: Map<string, number>
 ): Promise<void> {
   // 用户连续发送同一会话请求时，先取消旧流，防止并发回包乱序。
   const previous = inFlightBySession.get(message.payload.sessionId)
@@ -191,6 +195,7 @@ async function handleChatSend(
             payload: {
               sessionId: message.payload.sessionId,
               textDelta: event.delta,
+              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
@@ -201,6 +206,7 @@ async function handleChatSend(
             payload: {
               sessionId: message.payload.sessionId,
               finishReason: event.finishReason,
+              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
@@ -211,6 +217,7 @@ async function handleChatSend(
             payload: {
               sessionId: message.payload.sessionId,
               message: event.message,
+              seq: nextStreamSequence(streamSeqByRequest, message.requestId),
             },
           })
           break
@@ -225,6 +232,7 @@ async function handleChatSend(
         payload: {
           sessionId: message.payload.sessionId,
           finishReason: 'cancelled',
+          seq: nextStreamSequence(streamSeqByRequest, message.requestId),
         },
       })
       return
@@ -237,6 +245,7 @@ async function handleChatSend(
         payload: {
           sessionId: message.payload.sessionId,
           message: error.message,
+          seq: nextStreamSequence(streamSeqByRequest, message.requestId),
         },
       })
       return
@@ -249,6 +258,7 @@ async function handleChatSend(
       payload: {
         sessionId: message.payload.sessionId,
         message: errorMessage,
+        seq: nextStreamSequence(streamSeqByRequest, message.requestId),
       },
     })
   } finally {
@@ -257,6 +267,8 @@ async function handleChatSend(
     if (current?.controller === controller) {
       inFlightBySession.delete(message.payload.sessionId)
     }
+    // 请求结束后清理序号状态，避免长期堆积。
+    streamSeqByRequest.delete(message.requestId)
   }
 }
 
@@ -457,6 +469,13 @@ async function postEditorContextState(panel: WebviewHost, requestId?: string): P
  */
 async function postTypedMessage(panel: WebviewHost, message: ExtensionToWebviewMessage): Promise<void> {
   await panel.webview.postMessage(message)
+}
+
+function nextStreamSequence(streamSeqByRequest: Map<string, number>, requestId: string): number {
+  const current = streamSeqByRequest.get(requestId) ?? 0
+  const next = current + 1
+  streamSeqByRequest.set(requestId, next)
+  return next
 }
 
 /**

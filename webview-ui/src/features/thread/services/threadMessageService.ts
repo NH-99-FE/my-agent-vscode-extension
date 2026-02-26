@@ -1,6 +1,7 @@
 import type { ChatAttachment, ExtensionToWebviewMessage, WebviewToExtensionMessage, ReasoningLevel } from '@agent/types'
 import { CONTEXT_FILES_LIMIT_NOTICE, MAX_CONTEXT_FILES } from '../store/threadComposerStore'
-import { resolveStreamGate, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR } from './streamRequestGuard'
+import { clearStreamRequest, STREAM_PROTOCOL_GAP_ERROR, STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR } from './streamRequestGuard'
+import type { StreamMessageOutcome } from './threadSessionService'
 
 // 发送聊天消息的输入参数
 type SendChatInput = {
@@ -88,7 +89,11 @@ export function buildContextFilesPickMessage(maxCount: number, requestId: string
  * - `chat.error` / `chat.done(cancelled|error)`：保留附件
  * - 发送态按 sessionId 维护，不依赖当前激活会话，避免切会话后 sending 悬挂
  */
-export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage, actions: ThreadMessageActions): void {
+export function handleThreadExtensionMessage(
+  message: ExtensionToWebviewMessage,
+  actions: ThreadMessageActions,
+  streamOutcome: StreamMessageOutcome
+): void {
   switch (message.type) {
     case 'context.files.picked': {
       const targetSessionId = actions.consumePendingContextPickSession(message.requestId)
@@ -96,32 +101,36 @@ export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage,
       return
     }
     case 'chat.delta': {
-      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
-      if (gate !== 'missing_with_active') {
+      const outcome = resolveStreamMessageOutcome(streamOutcome)
+      if (outcome !== 'missing_with_active' && outcome !== 'gap') {
         return
       }
       const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
       if (activeRequestId === undefined) {
         return
       }
-      actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+      const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
+      actions.setInlineNotice(notice, message.payload.sessionId)
       actions.setSending(message.payload.sessionId, false)
       actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+      clearStreamRequest(activeRequestId)
       return
     }
     case 'chat.done': {
-      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
-      if (gate === 'ignore') {
+      const outcome = resolveStreamMessageOutcome(streamOutcome)
+      if (outcome === 'ignore') {
         return
       }
-      if (gate === 'missing_with_active') {
+      if (outcome === 'missing_with_active' || outcome === 'gap') {
         const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
         if (activeRequestId === undefined) {
           return
         }
-        actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+        const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
+        actions.setInlineNotice(notice, message.payload.sessionId)
         actions.setSending(message.payload.sessionId, false)
         actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+        clearStreamRequest(activeRequestId)
         return
       }
 
@@ -132,22 +141,25 @@ export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage,
       const requestId = message.requestId
       if (requestId !== undefined) {
         actions.endAssistantRequest(message.payload.sessionId, requestId)
+        clearStreamRequest(requestId)
       }
       return
     }
     case 'chat.error': {
-      const gate = resolveStreamGate(message.payload.sessionId, message.requestId, actions)
-      if (gate === 'ignore') {
+      const outcome = resolveStreamMessageOutcome(streamOutcome)
+      if (outcome === 'ignore') {
         return
       }
-      if (gate === 'missing_with_active') {
+      if (outcome === 'missing_with_active' || outcome === 'gap') {
         const activeRequestId = actions.getActiveAssistantRequestId(message.payload.sessionId)
         if (activeRequestId === undefined) {
           return
         }
-        actions.setInlineNotice(STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR, message.payload.sessionId)
+        const notice = outcome === 'gap' ? STREAM_PROTOCOL_GAP_ERROR : STREAM_PROTOCOL_MISSING_REQUEST_ID_ERROR
+        actions.setInlineNotice(notice, message.payload.sessionId)
         actions.setSending(message.payload.sessionId, false)
         actions.endAssistantRequest(message.payload.sessionId, activeRequestId)
+        clearStreamRequest(activeRequestId)
         return
       }
 
@@ -156,6 +168,7 @@ export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage,
       const requestId = message.requestId
       if (requestId !== undefined) {
         actions.endAssistantRequest(message.payload.sessionId, requestId)
+        clearStreamRequest(requestId)
       }
       return
     }
@@ -163,6 +176,15 @@ export function handleThreadExtensionMessage(message: ExtensionToWebviewMessage,
       return
     }
   }
+}
+
+function resolveStreamMessageOutcome(
+  streamOutcome: StreamMessageOutcome
+): StreamMessageOutcome {
+  if (streamOutcome === 'not_stream') {
+    return 'ignore'
+  }
+  return streamOutcome
 }
 
 /**

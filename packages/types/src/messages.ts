@@ -127,6 +127,7 @@ export interface ChatDeltaMessage extends MessageMeta {
   payload: {
     sessionId: string // 会话 ID
     textDelta: string // 新增文本片段，前端应增量拼接
+    seq?: number // 可选流式序号（同 requestId 内单调递增）
   }
 }
 
@@ -136,6 +137,7 @@ export interface ChatDoneMessage extends MessageMeta {
   payload: {
     sessionId: string // 会话 ID
     finishReason: 'stop' | 'length' | 'cancelled' | 'error' // 结束原因：正常停止、长度截断、主动取消或错误结束
+    seq?: number // 可选终态序号（应大于最后一条 delta 的 seq）
   }
 }
 
@@ -145,6 +147,7 @@ export interface ChatErrorMessage extends MessageMeta {
   payload: {
     sessionId: string // 会话 ID
     message: string // 错误信息
+    seq?: number // 可选终态序号（应大于最后一条 delta 的 seq）
   }
 }
 

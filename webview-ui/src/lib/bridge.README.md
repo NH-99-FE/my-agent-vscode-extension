@@ -82,7 +82,28 @@ function Demo() {
 - `finishReason = 'stop' | 'length'`：清空附件
 - `finishReason = 'cancelled' | 'error'`：保留附件，方便重试
 
-## 5.2 后端上下文拼装过滤规则（固定）
+## 5.2 chat.delta/chat.done/chat.error 的 seq 约定
+
+流式回包支持可选 `seq` 字段（同一个 `requestId` 下单调递增）：
+
+- `chat.delta`：普通增量事件，`seq` 递增
+- `chat.done` / `chat.error`：终态事件，`seq` 应大于最后一条 `chat.delta.seq`
+- 旧协议兼容：若消息缺失 `seq`，前端回退为仅按 `requestId` 做门禁
+
+前端消费规则：
+
+- `seq <= lastSeq`：视为重复包，忽略
+- `seq === lastSeq + 1`：正常消费
+- `seq > lastSeq + 1`：判定 gap，终止该请求并提示协议错误
+
+## 5.3 取消状态收敛约定
+
+- 状态机：`active -> streaming -> done|error`
+- 状态机：`active -> cancelling -> done(cancelled)|error`
+- 当请求处于 `cancelling` 时，前端对 `chat.delta` 一律忽略（即使 `seq` 连续）
+- 仅收到终态回包后才最终收敛 UI（结束 sending / 清理 active request）
+
+## 5.4 后端上下文拼装过滤规则（固定）
 
 后端在“会话历史 -> provider 输入”阶段按固定规则过滤消息（无开关）：
 
